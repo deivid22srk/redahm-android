@@ -51,9 +51,9 @@ if(REXGLUE_BUILD_TESTS)
 endif()
 
 foreach(submodule ${REQUIRED_SUBMODULES})
-    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${submodule}/.git")
+    if(NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${submodule}")
         message(FATAL_ERROR
-            "Git submodule '${submodule}' is not initialized.\n"
+            "Third-party directory '${submodule}' is missing.\n"
             "Please run: git submodule update --init --recursive\n"
             "from the repository root directory."
         )
