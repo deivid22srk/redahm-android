@@ -1,0 +1,95 @@
+name: Build APK
+
+on:
+  push:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ReDAHM APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    env:
+      NDK_VERSION: "27.2.12479018"
+      JOBS: "3"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            ninja-build cmake clang-18 \
+            libx11-xcb-dev libasound2-dev libpulse-dev libwayland-dev \
+            wayland-protocols libxext-dev libxrandr-dev libxi-dev \
+            libxcursor-dev libxfixes-dev libxss-dev libdrm-dev libgbm-dev \
+            libxtst-dev libxkbcommon-dev libudev-dev \
+            nasm yasm zip unzip
+          clang-18 --version | head -1
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: actions/setup-android@v4
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+
+      - name: Install required SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "ndk;${NDK_VERSION}" "platforms;android-35" "build-tools;35.0.0"
+          ls "$ANDROID_HOME/ndk/${NDK_VERSION}/build/cmake/android.toolchain.cmake"
+
+      - name: Cache rexglue host codegen tool
+        uses: actions/cache@v4
+        with:
+          path: |
+            native/build-host
+            native/rexglue-sdk/out
+          key: rexglue-host-v0.9.0-${{ runner.os }}-${{ hashFiles('native/rexglue-sdk/CMakeLists.txt', 'native/rexglue-sdk/cmake/**', 'native/rexglue-sdk/src/**', 'native/rexglue-sdk/tools/**') }}
+          restore-keys: |
+            rexglue-host-v0.9.0-${{ runner.os }}-
+
+      - name: Build native code (host codegen + codegen + NDK arm64)
+        env:
+          CC: clang-18
+          CXX: clang++-18
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/${{ env.NDK_VERSION }}
+        run: |
+          bash build-android.sh
+
+      - name: Build APK
+        working-directory: android
+        run: |
+          ./gradlew --no-daemon assembleDebug
+          ls -la app/build/outputs/apk/debug/
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: redahm-android-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+
+      - name: Upload native build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-build-logs
+          path: |
+            native/build-host/cmake.log
+            native/build-host/build.log
+            native/build-host/build.ninja
+          retention-days: 7
