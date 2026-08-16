@@ -18,6 +18,8 @@ jobs:
     env:
       NDK_VERSION: "27.2.12479018"
       JOBS: "3"
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
     steps:
       - name: Checkout
@@ -41,15 +43,14 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Set up Android SDK
-        uses: actions/setup-android@v4
-        with:
-          ndk-version: ${{ env.NDK_VERSION }}
-
-      - name: Install required SDK packages
+      - name: Install Android NDK and SDK packages
         run: |
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "ndk;${NDK_VERSION}" "platforms;android-35" "build-tools;35.0.0"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME" | head -5
+          export JAVA_HOME="${JAVA_HOME_21_X64:-$JAVA_HOME}"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "ndk;${NDK_VERSION}" "platforms;android-35" "build-tools;35.0.0"
           ls "$ANDROID_HOME/ndk/${NDK_VERSION}/build/cmake/android.toolchain.cmake"
 
       - name: Cache rexglue host codegen tool
