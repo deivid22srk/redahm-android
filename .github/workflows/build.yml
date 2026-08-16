@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 360
 
     env:
-      NDK_VERSION: "27.2.12479018"
+      NDK_VERSION: "28.2.13676358"
       JOBS: "3"
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk

@@ -97,3 +97,14 @@ redahm-android/
 1. Verify local codegen completes (validates manifest + configs for CI).
 2. Push to `deivid22srk/redahm-android`; iterate on CI until `redahm-android-apk` artifact.
 3. Manual device smoke test (app opens, Vulkan init, module load) once APK available.
+
+## 2026-08-16: libc++/chrono + NDK r28 fixes
+- **Discovery:** `std::chrono::clock_time_conversion` / `clock_cast<>` is ONLY implemented by libstdc++ (and MSVC STL). libc++ (used by ALL Android NDK versions, incl. LLVM 19 r28c and 21) does not provide it. That is why the NDK r27 build failed at `threading.cpp.o` (`chrono.h:120 explicit specialization of undeclared template struct 'clock_time_conversion'`); the host tool build passed because Linux uses libstdc++ 13.
+- **Fix (SDK patch):** added portable helpers in `rex::chrono` namespace replicating the exact conversion logic:
+  - `XSystemToWinSystemTime` / `WinSystemToXSystemTime` (chrono.h)
+  - `SteadyToWinSystemTime` / `WinSystemToSteadyTime` (chrono_steady_cast.h)
+  - Call sites switched from `std::chrono::clock_cast<>` to the helpers: `xtimer.cpp` (X→Win), `threading_posix.cpp` (Win→steady, 2 sites), `threading_win.cpp` (steady→Win, 2 sites, Win-only).
+  - The `std::chrono::clock_time_conversion` specializations are now guarded by `#if defined(__GLIBCXX__) || defined(_MSC_VER)` (unused by rex code; kept so host libstdc++ builds that call clock_cast still compile).
+- **Other Android compile fixes (threading_posix.cpp):** robust mutexes (`PTHREAD_MUTEX_ROBUST`, `pthread_mutex_consistent`) are glibc-only; bionic lacks them. Guards changed `#if REX_PLATFORM_LINUX` → `#if REX_PLATFORM_LINUX && !REX_PLATFORM_ANDROID` (3 sites). Added `#include <rex/math.h>` (rex::countof used in Android name-setter, was only reached transitively on Linux).
+- **NDK bump:** workflow `NDK_VERSION: 27.2.12479018` → `28.2.13676358` (r28c, clang 19). Verified locally: r28 configure OK; `threading.cpp.o`, `threading_posix.cpp.o`, `xtimer.cpp.o` compile clean with r28 + patches; host libstdc++ compile of the same objects also clean.
+- Committed & pushed (see log).

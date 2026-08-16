@@ -18,8 +18,48 @@
 // This is in a separate header because casting to and from steady time points
 // usually doesn't make sense and is imprecise. However, NT uses the FileTime
 // epoch as a steady clock in waits. In such cases, include this header and use
-// clock_cast<>().
+// the conversion helpers below (or clock_cast<>() on libstdc++).
 
+namespace rex::chrono {
+
+// Steady (host wait) clock -> WinSystemClock. Only valid for the Host time
+// domain; convert Guest first if necessary.
+template <typename Duration>
+WinSystemClock::time_point SteadyToWinSystemTime(
+    const std::chrono::time_point<std::chrono::steady_clock, Duration>& t) {
+  // Since there is no known epoch for steady_clock and even if, since it can
+  // progress differently than other common clocks (e.g. stopping when the
+  // computer is suspended), we need to use now() which introduces
+  // imprecision.
+  // Memory fences to keep the clock fetches close together to
+  // minimize drift. This pattern was benchmarked to give the lowest
+  // conversion error: error = sty_tpoint -
+  // clock_cast<sty>(clock_cast<nt>(sty_tpoint));
+  std::atomic_thread_fence(std::memory_order_acq_rel);
+  auto steady_now = std::chrono::steady_clock::now();
+  auto nt_now = WinSystemClock::now();
+  std::atomic_thread_fence(std::memory_order_acq_rel);
+
+  auto delta = std::chrono::floor<WinSystemClock::duration>(t - steady_now);
+  return nt_now + delta;
+}
+
+// WinSystemClock -> steady (host wait) clock.
+template <typename Duration>
+std::chrono::steady_clock::time_point WinSystemToSteadyTime(
+    const std::chrono::time_point<WinSystemClock, Duration>& t) {
+  std::atomic_thread_fence(std::memory_order_acq_rel);
+  auto steady_now = std::chrono::steady_clock::now();
+  auto nt_now = WinSystemClock::now();
+  std::atomic_thread_fence(std::memory_order_acq_rel);
+
+  auto delta = t - nt_now;
+  return steady_now + delta;
+}
+
+}  // namespace rex::chrono
+
+#if defined(__GLIBCXX__) || defined(_MSC_VER)
 namespace std::chrono {
 
 // This conveniently works only for Host time domain because Guest needs
@@ -71,3 +111,4 @@ struct clock_time_conversion<std::chrono::steady_clock, ::rex::chrono::WinSystem
 };
 
 }  // namespace std::chrono
+#endif  // defined(__GLIBCXX__)

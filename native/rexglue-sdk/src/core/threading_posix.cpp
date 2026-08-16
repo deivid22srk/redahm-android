@@ -33,6 +33,7 @@ static_assert(REX_PLATFORM_LINUX || REX_PLATFORM_MAC, "This file is POSIX-only")
 #include <rex/assert.h>
 #include <rex/chrono/chrono_steady_cast.h>
 #include <rex/logging.h>
+#include <rex/math.h>
 #include <rex/thread/timer_queue.h>
 
 #include <sched.h>
@@ -216,7 +217,7 @@ bool SetTlsValue(TlsHandle handle, uintptr_t value) {
 class PosixConditionBase {
  public:
   PosixConditionBase() {
-#if REX_PLATFORM_LINUX
+#if REX_PLATFORM_LINUX && !REX_PLATFORM_ANDROID
     // Use robust mutexes so waits can recover if owner thread terminates.
     pthread_mutexattr_t attr;
     if (pthread_mutexattr_init(&attr) == 0) {
@@ -236,7 +237,7 @@ class PosixConditionBase {
   WaitResult Wait(std::chrono::milliseconds timeout) {
     bool executed;
     auto predicate = [this] { return this->signaled(); };
-#if REX_PLATFORM_LINUX
+#if REX_PLATFORM_LINUX && !REX_PLATFORM_ANDROID
     auto native_mutex = static_cast<pthread_mutex_t*>(mutex_.native_handle());
     int lock_result = pthread_mutex_lock(native_mutex);
     if (lock_result == EOWNERDEAD) {
@@ -290,7 +291,7 @@ class PosixConditionBase {
       locks.reserve(handles.size());
 
       for (size_t i = 0; i < handles.size(); ++i) {
-#if REX_PLATFORM_LINUX
+#if REX_PLATFORM_LINUX && !REX_PLATFORM_ANDROID
         auto native_mutex = static_cast<pthread_mutex_t*>(handles[i]->mutex_.native_handle());
         int result = pthread_mutex_trylock(native_mutex);
         if (result == 0 || result == EOWNERDEAD) {
@@ -1207,7 +1208,7 @@ class PosixTimer : public PosixConditionHandle<Timer> {
   }
   bool SetOnceAt(WClock_::time_point due_time,
                  std::function<void()> opt_callback = nullptr) override {
-    return SetOnceAt(std::chrono::clock_cast<GClock_>(due_time), std::move(opt_callback));
+    return SetOnceAt(rex::chrono::WinSystemToSteadyTime(due_time), std::move(opt_callback));
   };
   bool SetOnceAt(GClock_::time_point due_time,
                  std::function<void()> opt_callback = nullptr) override {
@@ -1221,7 +1222,7 @@ class PosixTimer : public PosixConditionHandle<Timer> {
   }
   bool SetRepeatingAt(WClock_::time_point due_time, std::chrono::milliseconds period,
                       std::function<void()> opt_callback = nullptr) override {
-    return SetRepeatingAt(std::chrono::clock_cast<GClock_>(due_time), period,
+    return SetRepeatingAt(rex::chrono::WinSystemToSteadyTime(due_time), period,
                           std::move(opt_callback));
   }
   bool SetRepeatingAt(GClock_::time_point due_time, std::chrono::milliseconds period,

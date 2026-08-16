@@ -111,9 +111,52 @@ using WinSystemClock = detail::NtSystemClock<detail::Domain::Host>;
 // Guest system clock, scaled
 using XSystemClock = detail::NtSystemClock<detail::Domain::Guest>;
 
+// Conversion helpers between the two rex system clocks. std::chrono's
+// clock_cast/clock_time_conversion (used below when compiling against
+// libstdc++) is not implemented by libc++ (which the Android NDK provides), so
+// call sites use these functions instead of std::chrono::clock_cast<>.
+template <typename Duration>
+WinSystemClock::time_point XSystemToWinSystemTime(
+    const std::chrono::time_point<XSystemClock, Duration>& t) {
+  // Consult chrono_steady_cast.h for explanation on this pattern:
+  std::atomic_thread_fence(std::memory_order_acq_rel);
+  auto w_now = WinSystemClock::now();
+  auto x_now = XSystemClock::now();
+  std::atomic_thread_fence(std::memory_order_acq_rel);
+
+  auto delta = (t - x_now);
+  if (!REXCVAR_GET(clock_no_scaling)) {
+    delta = std::chrono::floor<WinSystemClock::duration>(
+        delta * rex::chrono::Clock::guest_time_scalar());
+  }
+  return w_now + delta;
+}
+
+template <typename Duration>
+XSystemClock::time_point WinSystemToXSystemTime(
+    const std::chrono::time_point<WinSystemClock, Duration>& t) {
+  // Consult chrono_steady_cast.h for explanation on this pattern:
+  std::atomic_thread_fence(std::memory_order_acq_rel);
+  auto w_now = WinSystemClock::now();
+  auto x_now = XSystemClock::now();
+  std::atomic_thread_fence(std::memory_order_acq_rel);
+
+  rex::chrono::hundrednanoseconds delta = (t - w_now);
+  if (!REXCVAR_GET(clock_no_scaling)) {
+    delta = std::chrono::floor<WinSystemClock::duration>(
+        delta / rex::chrono::Clock::guest_time_scalar());
+  }
+  return x_now + delta;
+}
+
 }  // namespace chrono
 }  // namespace rex
 
+// std::chrono::clock_time_conversion is only implemented by libstdc++; libc++
+// (used by the Android NDK) does not provide it. Keep the std::chrono
+// specializations on libstdc++ so host builds can still use clock_cast<>(),
+// but they are not required by rex code (which uses the helpers above).
+#if defined(__GLIBCXX__) || defined(_MSC_VER)
 namespace std::chrono {
 
 template <>
@@ -163,3 +206,4 @@ struct clock_time_conversion<::rex::chrono::XSystemClock, ::rex::chrono::WinSyst
 };
 
 }  // namespace std::chrono
+#endif  // defined(__GLIBCXX__)
