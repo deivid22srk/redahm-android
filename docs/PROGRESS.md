@@ -55,10 +55,24 @@ redahm-android/
 
 ## In progress
 
-- [ ] **Host codegen tool build** (`native/build-host`, clang-18, `-march=x86-64-v3`,
-      `-D__cpp_concepts=202002L`) → then first full `rexglue codegen` run, committed
-      knowledge: manifest/configs parse, `generated/` is gitignored (CI regenerates it).
-- [ ] First CI run → fix errors iteratively until APK artifact builds.
+- [x] Host codegen tool built (clang-18, `-march=x86-64-v3`, `-D__cpp_concepts=202002L`).
+- [x] `rexglue codegen` verified locally: `CG_EXIT: 0` (1294s) → `generated/` (150 recomp
+      units + `sources.cmake`). Key lesson: **`rexglue init` must NOT be run on CI** — it
+      rewrites the manifest and strips the `redahm_config.toml` includes (which declare
+      edge-case function starts that otherwise cause "8 unresolved calls"). So
+      `generated/rexglue.cmake` is committed and CI runs `codegen` only.
+- [x] Android CMake **configure** validated locally: `Platform: android-arm64`,
+      Clang 18.0.3 (NDK r27), Vulkan=ON, `rexglue_setup_target(redahm GPU_PLUGINS xenos)` OK.
+- [x] Pushed to `deivid22srk/redahm-android` (main). CI workflow runs.
+- [ ] **CI run**: host tool → codegen → NDK arm64 build → Gradle APK → artifact.
+
+## First CI attempt findings
+
+- `actions/setup-android` does **not exist** → replaced with the runner image's
+  `sdkmanager` (`$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager`).
+- AGP 9.3.1 requires **Gradle ≥ 9.5.0** (not 9.3.x/9.4.x) → wrapper bumped to 9.5.0.
+- `git push` used the wrong account (`deividgames5566`) → push explicitly with the
+  `deivid22srk` token URL.
 
 ## Known gotchas
 
