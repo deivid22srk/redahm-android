@@ -64,6 +64,12 @@ elseif(UNIX)
         system_posix.cpp
         threading_posix.cpp
     )
+    if(ANDROID)
+        # bionic removed getcontext/makecontext/swapcontext; use the ARM64
+        # assembly context switch instead.
+        list(APPEND rexcore_android_sources fiber_android.cpp)
+        target_sources(rexcore PRIVATE ${rexcore_android_sources})
+    endif()
 endif()
 
 # Xenos data-format layer (stateless; headers under include/rex/graphics/).
@@ -89,7 +95,13 @@ target_include_directories(rexcore PRIVATE
 )
 
 if(UNIX)
-    target_link_libraries(rexcore PRIVATE pthread rt dl)
+    if(ANDROID)
+        # bionic merged pthread/rt/dl into libc (and libdl is a stub); linking
+        # -lpthread/-lrt fails because those libraries do not exist.
+        target_link_libraries(rexcore PRIVATE dl)
+    else()
+        target_link_libraries(rexcore PRIVATE pthread rt dl)
+    endif()
 endif()
 
 target_link_libraries(rexcore

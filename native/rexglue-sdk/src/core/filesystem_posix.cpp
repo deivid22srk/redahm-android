@@ -67,20 +67,6 @@ std::filesystem::path GetExecutablePath() {
   }
   return lib_dir;
 }
-
-std::filesystem::path GetUserFolder() {
-  // Prefer app-specific external storage so the user can reach save data over
-  // USB without scoped-storage permissions. Fall back to internal data dir.
-  auto external = rex::GetAndroidExternalFilesDir();
-  if (!external.empty()) {
-    return external;
-  }
-  auto internal = rex::GetAndroidInternalDataDir();
-  if (!internal.empty()) {
-    return internal;
-  }
-  return std::filesystem::path("/data/data/redahm");
-}
 #else
 std::filesystem::path GetExecutablePath() {
   char buff[FILENAME_MAX] = "";

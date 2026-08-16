@@ -20,8 +20,10 @@
 namespace rex {
 
 #if REX_PLATFORM_ANDROID
+namespace system {
 bool InitializeAndroidSystemForApplicationContext();
 void ShutdownAndroidSystem();
+}  // namespace system
 #endif
 
 // The URL must include the protocol.

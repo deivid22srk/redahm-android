@@ -108,3 +108,15 @@ redahm-android/
 - **Other Android compile fixes (threading_posix.cpp):** robust mutexes (`PTHREAD_MUTEX_ROBUST`, `pthread_mutex_consistent`) are glibc-only; bionic lacks them. Guards changed `#if REX_PLATFORM_LINUX` → `#if REX_PLATFORM_LINUX && !REX_PLATFORM_ANDROID` (3 sites). Added `#include <rex/math.h>` (rex::countof used in Android name-setter, was only reached transitively on Linux).
 - **NDK bump:** workflow `NDK_VERSION: 27.2.12479018` → `28.2.13676358` (r28c, clang 19). Verified locally: r28 configure OK; `threading.cpp.o`, `threading_posix.cpp.o`, `xtimer.cpp.o` compile clean with r28 + patches; host libstdc++ compile of the same objects also clean.
 - Committed & pushed (see log).
+
+## 2026-08-16: Second round of Android compile/link fixes (full native build green locally)
+- Full NDK r28 arm64 build now completes locally: `libmain.so` (317MB, exports SDL_main), `librexruntime.so`, `librexgpu-xenos.so`. NINJA_EXIT=0.
+- Fixes in this round:
+  - `fiber.h`/`fiber_android.cpp`/`fiber_posix.cpp`: bionic removed getcontext/makecontext/swapcontext. New ARM64 asm context switch (naked fn saving x19-x28, x29, x30, sp, d8-d15) in `fiber_android.cpp`; struct gets an `AndroidContext`; `fiber_posix.cpp` guarded to non-Android.
+  - `filesystem_posix.cpp`: removed duplicate `GetUserFolder` (Android branch copy vs. the general one which already handles Android).
+  - `numeric.h`: libc++ lacks floating-point `std::from_chars`; added `detail::fp_from_chars` (strtof/strtod fallback when `__cpp_lib_to_chars` absent).
+  - `src/ui/windowed_app_main_sdl.cpp` + `include/rex/system.h`: `InitializeAndroidSystemForApplicationContext`/`ShutdownAndroidSystem` are declared/defined under `rex::system` (fixed namespace mismatch; rex::system is already used across the SDK).
+  - `core/CMakeLists.txt`: on Android don't link `-lpthread -lrt` (merged into libc in bionic).
+  - `ui/CMakeLists.txt`: link `android nativewindow` on Android for ANativeWindow_* symbols.
+  - `native/redahm/CMakeLists.txt`: add `${REXSDK_DIR}/thirdparty/imgui` include dir to the `main` target (rexruntime links rexui/imgui PRIVATE so the imgui header dir never propagates; redahm_engine headers include imgui.h directly).
+  - `build-android.sh`: stage .so's also from `$SDK/out/android-arm64` (librexruntime.so/libSDL3.so/plugin live deeper than the original `find -maxdepth 3` reached; libmain.so NEEDED them).

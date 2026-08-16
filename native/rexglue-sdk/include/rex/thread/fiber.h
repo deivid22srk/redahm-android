@@ -14,8 +14,11 @@
 #include <rex/platform.h>
 #include <cstddef>
 
-#if REX_PLATFORM_LINUX || REX_PLATFORM_MAC
+#if (REX_PLATFORM_LINUX || REX_PLATFORM_MAC) && !REX_PLATFORM_ANDROID
 #include <ucontext.h>
+#include <cstdint>
+#include <vector>
+#elif REX_PLATFORM_ANDROID
 #include <cstdint>
 #include <vector>
 #endif
@@ -51,8 +54,24 @@ struct Fiber {
 #if REX_PLATFORM_WIN32
   void* handle_ = nullptr;
   bool is_thread_fiber_ = false;
-#elif REX_PLATFORM_LINUX
+#elif (REX_PLATFORM_LINUX || REX_PLATFORM_MAC) && !REX_PLATFORM_ANDROID
   ucontext_t context_{};
+  std::vector<uint8_t> stack_;
+  void (*entry_)(void*) = nullptr;
+  void* arg_ = nullptr;
+  bool is_thread_fiber_ = false;
+
+  static void Trampoline();
+#elif REX_PLATFORM_ANDROID
+  // bionic removed getcontext/makecontext/swapcontext, so Android uses a
+  // hand-rolled ARM64 context switch (see fiber_android.cpp). Layout matches
+  // the switch routine: x19..x28, x29, x30, sp, d8..d15 (21 x 8 bytes).
+  struct AndroidContext {
+    uint64_t x19, x20, x21, x22, x23, x24, x25, x26, x27, x28;
+    uint64_t fp, lr, sp;
+    uint64_t d8, d9, d10, d11, d12, d13, d14, d15;
+  };
+  AndroidContext context_{};
   std::vector<uint8_t> stack_;
   void (*entry_)(void*) = nullptr;
   void* arg_ = nullptr;

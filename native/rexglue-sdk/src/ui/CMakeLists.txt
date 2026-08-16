@@ -143,7 +143,11 @@ if(REXGLUE_USE_VULKAN)
 endif()
 
 # Platform-specific dependencies
-if(NOT WIN32 AND NOT ANDROID)
+if(ANDROID)
+    # ANativeWindow_* (surface_android.cpp) live in libnativewindow/libandroid
+    # on modern platforms; they are not part of libc.
+    target_link_libraries(rexui PRIVATE android nativewindow)
+elseif(NOT WIN32)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(X11_XCB REQUIRED x11-xcb)
 

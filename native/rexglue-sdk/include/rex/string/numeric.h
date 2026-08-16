@@ -11,7 +11,9 @@
 #pragma once
 
 #include <charconv>
+#include <cerrno>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <string_view>
@@ -60,6 +62,31 @@ inline T from_string(const std::string_view value, bool force_hex = false) {
 }
 
 namespace detail {
+
+// libc++ did not implement floating-point std::from_chars until LLVM 21 (the
+// Android NDK ships older libc++, which only has the integer overload). Fall
+// back to strtof/strtod when the feature-test macro is absent.
+// Returns the next unconsumed pointer, or nullptr on failure.
+template <typename T>
+inline const char* fp_from_chars(const char* first, const char* last, T& out) {
+#if defined(__cpp_lib_to_chars)
+  auto res = std::from_chars(first, last, out, std::chars_format::general);
+  return res.ec == std::errc() ? res.ptr : nullptr;
+#else
+  std::string tmp(first, last);
+  char* endptr = nullptr;
+  errno = 0;
+  if constexpr (std::is_same_v<T, float>) {
+    out = std::strtof(tmp.c_str(), &endptr);
+  } else {
+    out = std::strtod(tmp.c_str(), &endptr);
+  }
+  if (errno != 0 || endptr == tmp.c_str()) {
+    return nullptr;
+  }
+  return first + (endptr - tmp.c_str());
+#endif
+}
 
 template <typename T, typename V = std::make_signed_t<T>>
 inline T make_negative(T value) {
@@ -133,10 +160,9 @@ inline T fpfs(const std::string_view value, bool force_hex) {
     }
     std::memcpy(&result, &pun, sizeof(PUN));
   } else {
-    auto [p, error] = std::from_chars(range.data(), range.data() + range.size(), result,
-                                      std::chars_format::general);
+    auto next = fp_from_chars(range.data(), range.data() + range.size(), result);
     // TODO(gibbed): do something more with errors?
-    if (error != std::errc()) {
+    if (!next) {
       assert_always();
       return T();
     }
@@ -253,12 +279,12 @@ inline vec128_t from_string<vec128_t>(const std::string_view value, bool force_h
         assert_always();
         return vec128_t();
       }
-      auto result = std::from_chars(p, end, v.f32[i], std::chars_format::general);
-      if (result.ec != std::errc()) {
+      auto next = detail::fp_from_chars(p, end, v.f32[i]);
+      if (!next) {
         assert_always();
         return vec128_t();
       }
-      p = result.ptr;
+      p = next;
     }
   }
   return v;

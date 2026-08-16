@@ -38,6 +38,9 @@ if(ANDROID)
         CXX_VISIBILITY_PRESET default
     )
     target_compile_definitions(main PRIVATE SDL_MAIN_HANDLED)
+    # imgui's include dir is not propagated to host targets (rexruntime links
+    # rexui/imgui PRIVATE), but redahm_engine headers include imgui.h directly.
+    target_include_directories(main PRIVATE "${REXSDK_DIR}/thirdparty/imgui")
     rexglue_setup_target(main GPU_PLUGINS xenos)
 elseif(WIN32)
     add_executable(redahm WIN32 ${REDAHM_SOURCES})
