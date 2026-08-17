@@ -77,14 +77,15 @@ cmake -G Ninja -S "$REDAHM" -B "$ANDROID_BUILD" \
 cmake --build "$ANDROID_BUILD" -j "$JOBS"
 
 echo "==> [4/4] Staging shared libraries for the APK"
-mkdir -p "$LIB_OUT"
-find "$ANDROID_BUILD" -maxdepth 3 -name "*.so" -type f -exec cp {} "$LIB_OUT/" \;
+mkdir -p "$LIB_OUT/arm64-v8a"
+# Gradle's jniLibs source sets expect <dir>/<abi>/*.so.
+find "$ANDROID_BUILD" -maxdepth 3 -name "*.so" -type f -exec cp {} "$LIB_OUT/arm64-v8a/" \;
 # Runtime shared libs (librexruntime.so, libSDL3.so, GPU plugin) are emitted to
 # the SDK out/android-arm64 dir, which sits deeper than the find above reaches.
-find "$SDK/out/android-arm64" -maxdepth 1 -name "*.so" -type f -exec cp {} "$LIB_OUT/" \;
-cp "$ANDROID_BUILD/libmain.so" "$LIB_OUT/" 2>/dev/null || true
+find "$SDK/out/android-arm64" -maxdepth 1 -name "*.so" -type f -exec cp {} "$LIB_OUT/arm64-v8a/" \;
+cp "$ANDROID_BUILD/libmain.so" "$LIB_OUT/arm64-v8a/" 2>/dev/null || true
 echo
-echo "Native libraries staged in $LIB_OUT:"
-ls -la "$LIB_OUT"
+echo "Native libraries staged in $LIB_OUT/arm64-v8a:"
+ls -la "$LIB_OUT/arm64-v8a"
 echo
 echo "Done. Run 'cd android && ./gradlew assembleRelease' (or assembleDebug) to build the APK."

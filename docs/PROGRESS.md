@@ -120,3 +120,9 @@ redahm-android/
   - `ui/CMakeLists.txt`: link `android nativewindow` on Android for ANativeWindow_* symbols.
   - `native/redahm/CMakeLists.txt`: add `${REXSDK_DIR}/thirdparty/imgui` include dir to the `main` target (rexruntime links rexui/imgui PRIVATE so the imgui header dir never propagates; redahm_engine headers include imgui.h directly).
   - `build-android.sh`: stage .so's also from `$SDK/out/android-arm64` (librexruntime.so/libSDL3.so/plugin live deeper than the original `find -maxdepth 3` reached; libmain.so NEEDED them).
+
+## 2026-08-17: APK packaging fix + JNI storage bridge
+- **CI native step passed** (commit dc1d0f4b): codegen + NDK arm64 build all green on the runner. The whole rexglue SDK + redahm now cross-compile for Android.
+- **Gradle packaging fix:** AGP 9 rejects `android:extractNativeLibs="true"` in the manifest (`:app:packageDebug FAILED`). Moved to `packagingOptions.jniLibs.useLegacyPackaging = true` in `android/app/build.gradle.kts` and removed the manifest attribute. Keeps the ~460MB of .so's compressed in the APK.
+- **JNI bridge (needed at runtime):** `MainActivity.setupNativePaths()` (native, in libmain.so via new `native/redahm/src/android_bridge.cpp`) is called from onCreate after SDLActivity loads the libs and before the SDL main thread starts. It feeds ApplicationInfo.nativeLibraryDir + files/cache dirs into `rex::SetAndroidAppPaths`, so `GetAndroidNativeLibraryDir()` resolves correctly (GPU plugin `librexgpu-xenos.so` is loaded from that dir) and user/external dirs work. Also stores the JavaVM via `InitializeAndroidJavaVM` (dependency libs never get JNI_OnLoad called).
+- Remaining: CI producing the APK artifact; then on-device runtime validation (MANAGE_EXTERNAL_STORAGE, game data at /storage/emulated/0/redahm/game, plugin load, Vulkan init).
