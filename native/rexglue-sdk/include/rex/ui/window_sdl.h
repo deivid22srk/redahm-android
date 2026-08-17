@@ -41,6 +41,17 @@ class WindowSDL final : public Window {
   void HandleDropEvent(SDL_Event& event);
   void HandlePaintEvent();
 
+#if REX_PLATFORM_ANDROID
+  // On Android the system may destroy and recreate the window's ANativeWindow
+  // at any moment (pause/resume, IME, SurfaceView recreation). SDL3 only
+  // refreshes SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER for this without posting
+  // any event, which invalidates the VkSurfaceKHR created from the old window.
+  // This re-reads the property and, if the native window has changed, recreates
+  // the window Surface (and thus the Vulkan surface/swapchain via the
+  // presenter). Must be called on the UI thread.
+  void CheckAndroidNativeWindowChanged();
+#endif
+
  protected:
   uint32_t GetLatestDpiImpl() const override;
 
@@ -76,6 +87,13 @@ class WindowSDL final : public Window {
   std::atomic<bool> paint_pending_{false};
   // Auto-hide cursor bookkeeping (CursorVisibility::kAutoHidden).
   SDL_TimerID cursor_hide_timer_ = 0;
+#if REX_PLATFORM_ANDROID
+  // Last known ANativeWindow pointer (for detecting its recreation).
+  void* android_native_window_ = nullptr;
+  // Periodic watchdog (Android posts no SDL event on native window
+  // recreation, so event handlers alone may miss it while painting is idle).
+  SDL_TimerID android_native_window_watchdog_timer_ = 0;
+#endif
 };
 
 }  // namespace rex::ui

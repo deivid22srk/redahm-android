@@ -92,6 +92,22 @@ Uint32 CursorAutoHideTimerCallback(void* userdata, SDL_TimerID timer_id, Uint32 
   return 0;  // One-shot.
 }
 
+#if REX_PLATFORM_ANDROID
+// SDL3's Android backend does not post any SDL event when the system recreates
+// the ANativeWindow (it only refreshes the SDL window property), so the rex
+// surface/Vulkan surface could stay attached to a destroyed native window and
+// presentation would fail forever. Poll the property periodically and defer
+// the surface refresh to the UI thread (where the presenter reconnection must
+// happen).
+Uint32 AndroidNativeWindowWatchdogCallback(void* userdata, SDL_TimerID timer_id, Uint32 interval) {
+  (void)timer_id;
+  (void)interval;
+  auto* window = static_cast<WindowSDL*>(userdata);
+  window->app_context().CallInUIThreadDeferred([window] { window->CheckAndroidNativeWindowChanged(); });
+  return interval;  // Repeating.
+}
+#endif
+
 MouseEvent::Button TranslateSDLMouseButton(Uint8 button) {
   switch (button) {
     case SDL_BUTTON_LEFT:
@@ -181,6 +197,10 @@ bool WindowSDL::OpenImpl() {
   if (SDL_GetWindowFlags(sdl_window_) & SDL_WINDOW_INPUT_FOCUS) {
     OnFocusUpdate(true, destruction_receiver);
   }
+#if REX_PLATFORM_ANDROID
+  android_native_window_watchdog_timer_ =
+      SDL_AddTimer(250, AndroidNativeWindowWatchdogCallback, this);
+#endif
   return true;
 }
 
@@ -203,6 +223,12 @@ void WindowSDL::DestroySDLWindow() {
     SDL_RemoveTimer(cursor_hide_timer_);
     cursor_hide_timer_ = 0;
   }
+#if REX_PLATFORM_ANDROID
+  if (android_native_window_watchdog_timer_) {
+    SDL_RemoveTimer(android_native_window_watchdog_timer_);
+    android_native_window_watchdog_timer_ = 0;
+  }
+#endif
   if (sdl_window_) {
     sdl_app_context().UnregisterWindow(sdl_window_id_);
     SDL_DestroyWindow(sdl_window_);
@@ -318,6 +344,7 @@ std::unique_ptr<Surface> WindowSDL::CreateSurfaceImpl(Surface::TypeFlags allowed
     void* window_ptr =
         SDL_GetPointerProperty(props, SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr);
     if (window_ptr) {
+      android_native_window_ = window_ptr;
       return std::make_unique<AndroidNativeWindowSurface>(
           static_cast<ANativeWindow*>(window_ptr));
     }
@@ -350,11 +377,40 @@ void WindowSDL::RequestPaintImpl() {
 
 void WindowSDL::HandlePaintEvent() {
   paint_pending_.store(false, std::memory_order_release);
+#if REX_PLATFORM_ANDROID
+  CheckAndroidNativeWindowChanged();
+#endif
   OnPaint();
 }
 
+#if REX_PLATFORM_ANDROID
+void WindowSDL::CheckAndroidNativeWindowChanged() {
+  if (!sdl_window_) {
+    return;
+  }
+  void* current =
+      SDL_GetPointerProperty(SDL_GetWindowProperties(sdl_window_),
+                             SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr);
+  if (current == android_native_window_) {
+    return;
+  }
+  android_native_window_ = current;
+  if (current != nullptr) {
+    // The native window has been recreated by the system - recreate the rex
+    // Surface from the new ANativeWindow, which makes the presenter recreate
+    // the Vulkan surface and swapchain. The presenter takes ownership of
+    // painting while this is being done, so it's safe even if the guest output
+    // thread is currently presenting.
+    OnSurfaceChanged(true);
+  }
+}
+#endif
+
 void WindowSDL::HandleWindowEvent(SDL_Event& event) {
   WindowDestructionReceiver destruction_receiver(this);
+#if REX_PLATFORM_ANDROID
+  CheckAndroidNativeWindowChanged();
+#endif
   switch (event.type) {
     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
       OnActualSizeUpdate(uint32_t(event.window.data1), uint32_t(event.window.data2),

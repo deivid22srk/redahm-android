@@ -155,3 +155,15 @@ redahm-android/
 - Constraints met: `useLegacyPackaging=true` (hook libs must be extracted to nativeLibraryDir); hook libs staged automatically by build-android.sh (the `$SDK/out/android-arm64/*.so` find picks them up).
 - Verified locally: full NDK arm64 build green; libmain.so exports both JNI symbols; librexruntime.so contains `adrenotools_open_libvulkan`; local `./gradlew assembleDebug` green; APK packages all 9 libs (5 runtime + 4 hooks).
 - Next: CI run; on-device test — import a Turnip driver and confirm Vulkan init picks it up (or confirm the stock driver is enough).
+
+## 2026-08-17: Recover from ANativeWindow recreation (Android surface loss)
+- First on-device test (Build #17, stock driver) got the game BOOTING on the moto g34: Xenos plugin loaded, Vulkan device (Adreno 619, stock driver, full feature set incl. geometry/tessellation/depthClamp), 1600x720 swapchain, default.xex loaded, splash/UnrealLogo BINK movies rendered. Confirmed the game data is read correctly.
+- Failure mode: after the loading screens the screen froze black with
+  `VulkanPresenter: Presentation to the swapchain image has been dropped as the swapchain or the surface has become outdated` followed by `VulkanPresenter: Failed to get Vulkan surface capabilities`.
+- Root cause (verified in the vendored SDL3 source): on Android the system can destroy + recreate the window's ANativeWindow (pause/resume, IME, SurfaceView recreation). SDL3's `onNativeSurfaceCreated`/`onNativeSurfaceDestroyed` ONLY refresh `SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER` and post NO SDL event. rex kept its VkSurfaceKHR created from the old (now released) ANativeWindow, so every present failed with VK_ERROR_SURFACE_LOST_KHR and the reconnect used the same stale surface ("Failed to get Vulkan surface capabilities") - permanent black screen.
+- Fix in `WindowSDL` (Android only):
+  - Cache the last-known ANativeWindow pointer; refresh it in `CreateSurfaceImpl`.
+  - New `CheckAndroidNativeWindowChanged()` (UI thread): re-reads the SDL property; if the native window changed (and is non-null), calls `OnSurfaceChanged(true)` so `CreateSurfaceImpl` re-reads the new ANativeWindow and the presenter re-creates the VkSurfaceKHR + swapchain. The presenter takes paint ownership during this, so it's safe vs. the guest-output present thread.
+  - Called from `HandlePaintEvent` and `HandleWindowEvent` (fast path), plus a 250 ms repeating SDL timer watchdog (deferred to the UI thread) so recovery also happens while painting is idle (paint mode kNone).
+- Verified: NDK arm64 build green; symbol present in librexruntime.so; local gradle APK built; APK's librexruntime.so confirmed byte-identical (minus .comment) to the fresh build.
+- Next on-device test: keep the stock driver first (this run validates the surface-loss fix); then optionally a Turnip driver via the new import button.
