@@ -132,3 +132,11 @@ redahm-android/
 - CI run 31988273110 all-green: codegen + NDK build + `assembleDebug` + artifact upload.
 - APK contents (`lib/arm64-v8a/`): libmain.so (~91MB stripped), librexruntime.so (~8.5MB stripped), libSDL3.so, librexgpu-xenos.so, libSPIRV-Tools-shared.so. Total APK ~40MB compressed.
 - Next: install on device (Android 8+/arm64, MANAGE_EXTERNAL_STORAGE granted), game data at /storage/emulated/0/redahm/game (default.xex + KronosGame/), then runtime bring-up (GPU plugin load, Vulkan init, first frames).
+
+## 2026-08-17: Java launcher screen before the game (run 32014478908)
+- MainActivity is now a plain Java activity (no native libs): SAF folder picker + ISO picker + "Iniciar Jogo" button. Selection persisted in SharedPreferences; folder must contain default.xex + KronosGame/; ISO resolves to a sibling extracted folder.
+- GameActivity (extends org.libsdl.app.SDLActivity, android:process=":game" so each launch gets fresh SDL native state) receives game_data_root/user_data_root via intent extras, builds --game_data_root/--user_data_root/--gpu_plugin=xenos args for SDL_main, and calls the JNI bridge (renamed Java_io_redahm_android_GameActivity_setupNativePaths) after libs load.
+- Fixed two more read-only-path bugs in rex_app.cpp SetupEnvironment: log dir and config file (redahm.toml) now live in the user data dir on Android (executable folder = read-only nativeLibraryDir). This was the actual SIGABRT: create_directories("/data/app/.../lib/logs") Permission denied.
+- App lookup chain verified: REX_DEFINE_APP(redahm,...) + SetAndroidAppName("redahm") + GetCreator by name (XE_UI_WINDOWED_APPS_IN_LIBRARY always 1).
+- Verified: GameActivity + SDLActivity classes in the APK dex; all 5 native libs packaged.
+- Device test (moto g34): APK run 32014478908 -> https://github.com/deivid22srk/redahm-android/actions/runs/32014478908
