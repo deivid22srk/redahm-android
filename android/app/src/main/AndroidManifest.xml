@@ -15,7 +15,6 @@
         android:allowBackup="false"
         android:hardwareAccelerated="true"
         android:label="ReDAHM"
-        android:extractNativeLibs="true"
         android:theme="@style/ReDAHMTheme">
 
         <activity

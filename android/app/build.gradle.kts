@@ -29,6 +29,15 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    packagingOptions {
+        // Keep the (large) native libraries compressed inside the APK and
+        // extract them at install time (equivalent to the manifest attribute
+        // extractNativeLibs="true", which AGP 9 rejects in the manifest).
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     // Native libraries (libmain.so, libSDL3.so, librexruntime.so,
     // librexgpu-xenos.so) are produced by the build-android.sh script (run by
     // CI before Gradle) and consumed from the shared native build output
