@@ -41,10 +41,19 @@ public class MainActivity extends SDLActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // Hand the app's storage paths to the native runtime (native library
+        // dir, files dirs, cache). Safe to call: libs are already loaded by
+        // super.onCreate() -> SDLActivity.loadLibraries(), and the SDL main
+        // thread only starts after onCreate returns.
+        setupNativePaths();
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             requestManageExternalStorageIfNeeded();
         }
     }
+
+    /** Implemented in libmain.so (src/android_bridge.cpp). */
+    private native void setupNativePaths();
 
     private void requestManageExternalStorageIfNeeded() {
         if (Environment.isExternalStorageManager()) {

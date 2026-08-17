@@ -29,6 +29,7 @@ if(WIN32)
 endif()
 
 if(ANDROID)
+    list(APPEND REDAHM_SOURCES src/android_bridge.cpp)
     # Android loads the game as a shared library (libmain.so) that exports
     # SDL_main; the SDL3 Java layer (SDLActivity) drives it.
     add_library(main SHARED ${REDAHM_SOURCES})
