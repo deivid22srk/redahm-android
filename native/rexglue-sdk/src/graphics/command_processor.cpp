@@ -143,7 +143,8 @@ bool CommandProcessor::Initialize() {
         return 0;
       }));
   worker_thread_->set_name("GPU Commands");
-  worker_thread_->Create();
+  X_STATUS thread_create_status = worker_thread_->Create();
+  REXSYS_INFO("GPU Commands worker thread Create() returned status {:08X}", uint32_t(thread_create_status));
 
   return true;
 }
@@ -272,10 +273,12 @@ void CommandProcessor::SetDesiredSwapPostEffect(SwapPostEffect swap_post_effect)
 }
 
 void CommandProcessor::WorkerThreadMain() {
+  REXSYS_INFO("GPU Commands worker thread entered WorkerThreadMain");
   if (!SetupContext()) {
     rex::FatalError("Unable to setup command processor internal state");
     return;
   }
+  REXSYS_INFO("GPU Commands worker thread SetupContext finished");
 
   while (worker_running_) {
     while (!pending_fns_.empty()) {

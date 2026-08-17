@@ -433,6 +433,7 @@ X_STATUS XThread::Create() {
   params.stack_size = 16_MiB;  // Allocate a big host stack.
   params.create_suspended = true;
   thread_ = rex::thread::Thread::Create(params, [this]() {
+    REXSYS_INFO("XThread{:08X} (thid {}) host thread lambda entered", handle(), thread_id_);
     rex::initialize_seh_thread();
     runtime::ThreadState::Bind(thread_state_.get());
 
