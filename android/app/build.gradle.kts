@@ -41,10 +41,11 @@ android {
     // Native libraries (libmain.so, libSDL3.so, librexruntime.so,
     // librexgpu-xenos.so) are produced by the build-android.sh script (run by
     // CI before Gradle) and consumed from the shared native build output
-    // directory.
+    // directory. Relative to the app module dir (android/app): two levels up
+    // reaches the repo root, then down into native/build-android/lib/<abi>/.
     sourceSets {
         getByName("main") {
-            jniLibs.srcDirs("../../../native/build-android/lib")
+            jniLibs.srcDirs("../../native/build-android/lib")
         }
     }
 }
