@@ -166,4 +166,14 @@ redahm-android/
   - New `CheckAndroidNativeWindowChanged()` (UI thread): re-reads the SDL property; if the native window changed (and is non-null), calls `OnSurfaceChanged(true)` so `CreateSurfaceImpl` re-reads the new ANativeWindow and the presenter re-creates the VkSurfaceKHR + swapchain. The presenter takes paint ownership during this, so it's safe vs. the guest-output present thread.
   - Called from `HandlePaintEvent` and `HandleWindowEvent` (fast path), plus a 250 ms repeating SDL timer watchdog (deferred to the UI thread) so recovery also happens while painting is idle (paint mode kNone).
 - Verified: NDK arm64 build green; symbol present in librexruntime.so; local gradle APK built; APK's librexruntime.so confirmed byte-identical (minus .comment) to the fresh build.
-- Next on-device test: keep the stock driver first (this run validates the surface-loss fix); then optionally a Turnip driver via the new import button.
+- On-device (12:51 UTC, run 32025905524 APK pending): this APK was built from b64c533b; the user's next test should use it with the stock driver first (validates the surface-loss fix), then optionally a Turnip driver.
+
+## 2026-08-17: Fix Turnip driver import (libvulkan_freedreno.so) + harden zip extraction
+- Second on-device test (09:51 -03, run 32024087991 APK = driver-import feature WITHOUT the surface-loss fix) still showed the same black screen (expected: that build predates b64c533b), and the driver import failed:
+  `W ReDAHM : Driver import: no .so found in /data/user/0/io.redahm.android/files/vulkan_drivers/WN-Turnip-1.06-p_Axxx`
+- Root cause: the user's package (WN-Turnip-1.06-p_Axxx.zip from WinNative-Emu/Drivers, unified Adreno build) ships `libvulkan_freedreno.so` + `meta.json`. `findDriverSo` excluded any `.so` whose name contained "freedreno" and preferred `libvulkan_turnip.so`/`libvulkan.so.qualcomm`, neither of which exist in that package -> "no .so found".
+- Fix (MainActivity.java):
+  - `findDriverSo` preferred order is now `libvulkan_freedreno.so` > `libvulkan_turnip.so` > `libvulkan.so.qualcomm` > any `.so` (freedreno exclusion removed).
+  - `extractDriverZip`: skip extraction when the output file already exists (keep the first/root-level copy; per-device subfolder variants share basenames) and `setExecutable(true, false)` on extracted `.so`.
+- `libdolphin.so` log spam explained: `Unable to open libdolphin.so` is a benign Android system message (also emitted by SurfaceFlinger and unrelated apps; a Qualcomm vendor probe) - not from this app.
+- Next: CI run for this fix; user re-imports WN-Turnip-1.06-p_Axxx.zip and confirms the Vulkan init log shows the Turnip/Mesa driver name instead of the Qualcomm stock driver.

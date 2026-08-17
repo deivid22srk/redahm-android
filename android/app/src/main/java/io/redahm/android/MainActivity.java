@@ -367,7 +367,14 @@ public class MainActivity extends Activity {
                 if (!name.endsWith(".so")) {
                     continue;
                 }
-                copyStream(zip, new File(targetDir, name));
+                File out = new File(targetDir, name);
+                if (out.exists()) {
+                    // Keep the first (root-level) copy; device-variant subfolder
+                    // builds may carry the same basename in several folders.
+                    continue;
+                }
+                copyStream(zip, out);
+                out.setExecutable(true, false);
                 zip.closeEntry();
             }
         }
@@ -424,7 +431,8 @@ public class MainActivity extends Activity {
         if (files == null) {
             return null;
         }
-        for (String preferred : new String[]{"libvulkan_turnip.so", "libvulkan.so.qualcomm"}) {
+        for (String preferred : new String[]{"libvulkan_freedreno.so", "libvulkan_turnip.so",
+                "libvulkan.so.qualcomm"}) {
             for (File f : files) {
                 if (f.getName().equals(preferred)) {
                     return f.getName();
@@ -432,7 +440,7 @@ public class MainActivity extends Activity {
             }
         }
         for (File f : files) {
-            if (f.getName().endsWith(".so") && !f.getName().contains("freedreno")) {
+            if (f.getName().endsWith(".so")) {
                 return f.getName();
             }
         }
