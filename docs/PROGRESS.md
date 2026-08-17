@@ -126,3 +126,9 @@ redahm-android/
 - **Gradle packaging fix:** AGP 9 rejects `android:extractNativeLibs="true"` in the manifest (`:app:packageDebug FAILED`). Moved to `packagingOptions.jniLibs.useLegacyPackaging = true` in `android/app/build.gradle.kts` and removed the manifest attribute. Keeps the ~460MB of .so's compressed in the APK.
 - **JNI bridge (needed at runtime):** `MainActivity.setupNativePaths()` (native, in libmain.so via new `native/redahm/src/android_bridge.cpp`) is called from onCreate after SDLActivity loads the libs and before the SDL main thread starts. It feeds ApplicationInfo.nativeLibraryDir + files/cache dirs into `rex::SetAndroidAppPaths`, so `GetAndroidNativeLibraryDir()` resolves correctly (GPU plugin `librexgpu-xenos.so` is loaded from that dir) and user/external dirs work. Also stores the JavaVM via `InitializeAndroidJavaVM` (dependency libs never get JNI_OnLoad called).
 - Remaining: CI producing the APK artifact; then on-device runtime validation (MANAGE_EXTERNAL_STORAGE, game data at /storage/emulated/0/redahm/game, plugin load, Vulkan init).
+
+## 2026-08-17: First complete APK (all native libs packaged)
+- Root cause of the 917KB APK: Gradle `jniLibs` source dirs resolve relative to the module dir (`android/app/`), so `../../../native/build-android/lib` pointed ABOVE the repo root. Fixed to `../../native/build-android/lib` (commit 844f5bee), combined with staging `.so`'s under `lib/arm64-v8a/` (commit daa3e208).
+- CI run 31988273110 all-green: codegen + NDK build + `assembleDebug` + artifact upload.
+- APK contents (`lib/arm64-v8a/`): libmain.so (~91MB stripped), librexruntime.so (~8.5MB stripped), libSDL3.so, librexgpu-xenos.so, libSPIRV-Tools-shared.so. Total APK ~40MB compressed.
+- Next: install on device (Android 8+/arm64, MANAGE_EXTERNAL_STORAGE granted), game data at /storage/emulated/0/redahm/game (default.xex + KronosGame/), then runtime bring-up (GPU plugin load, Vulkan init, first frames).
