@@ -20,6 +20,7 @@
         <activity
             android:name=".MainActivity"
             android:label="ReDAHM"
+            android:theme="@style/ReDAHMLauncherTheme"
             android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|uiMode"
             android:launchMode="singleTask"
             android:exported="true">
@@ -27,6 +28,15 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".GameActivity"
+            android:label="ReDAHM"
+            android:theme="@style/ReDAHMTheme"
+            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|uiMode"
+            android:process=":game"
+            android:exported="false">
         </activity>
     </application>
 

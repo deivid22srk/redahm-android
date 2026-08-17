@@ -1,8 +1,8 @@
 /**
  * @file        src/android_bridge.cpp
- * @brief       JNI bridge between MainActivity (Java) and the rex runtime.
+ * @brief       JNI bridge between GameActivity (Java) and the rex runtime.
  *
- * Called once from MainActivity.onCreate() after SDL3/libmain.so are loaded
+ * Called once from GameActivity.onCreate() after SDL3/libmain.so are loaded
  * (but before the SDL main thread starts). It hands the app's storage paths
  * to the runtime so GetAndroidNativeLibraryDir() / GetAndroidExternalFilesDir()
  * resolve to real directories (the GPU plugin is loaded from the native
@@ -16,7 +16,7 @@
 #include <rex/main_android.h>
 
 extern "C" JNIEXPORT void JNICALL
-Java_io_redahm_android_MainActivity_setupNativePaths(JNIEnv* env, jobject thiz) {
+Java_io_redahm_android_GameActivity_setupNativePaths(JNIEnv* env, jobject thiz) {
   // Make the JavaVM available to native threads regardless of whether
   // librexruntime.so's JNI_OnLoad ran (dependency libraries are not notified
   // of load events by the VM).

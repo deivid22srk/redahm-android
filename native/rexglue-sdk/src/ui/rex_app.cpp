@@ -141,8 +141,16 @@ bool ReXApp::SetupEnvironment() {
     metadata_dir = metadata_root_cvar;
   }
 
-  PathConfig path_config{game_dir,  user_dir,     update_dir,
-                         cache_dir, metadata_dir, exe_dir / (std::string(GetName()) + ".toml")};
+  std::filesystem::path config_path;
+#if REX_PLATFORM_ANDROID
+  // The executable folder is the (read-only) native library dir on Android;
+  // config writes (settings dialog) go next to the user data instead.
+  config_path = user_dir / (std::string(GetName()) + ".toml");
+#else
+  config_path = exe_dir / (std::string(GetName()) + ".toml");
+#endif
+  PathConfig path_config{game_dir, user_dir,     update_dir,
+                         cache_dir, metadata_dir, config_path};
   OnConfigurePaths(path_config);
   game_data_root_ = path_config.game_data_root;
   user_data_root_ = path_config.user_data_root;
@@ -167,7 +175,13 @@ bool ReXApp::SetupEnvironment() {
                                         log_level_str, category_levels);
   if (log_file_cvar.empty()) {
     log_config.app_name = std::string(GetName());
+#if REX_PLATFORM_ANDROID
+    // The executable folder is the (read-only) native library dir on Android;
+    // logs go next to the user data instead.
+    log_config.log_dir = (user_dir / "logs").string();
+#else
     log_config.log_dir = (exe_dir / "logs").string();
+#endif
   }
 
   rex::InitLogging(log_config);
