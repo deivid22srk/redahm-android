@@ -104,3 +104,28 @@ Java_io_redahm_android_GameActivity_setupNativePaths(JNIEnv* env, jobject thiz) 
                           external_storage_dir, cache_dir);
   rex::SetAndroidAppName("redahm");
 }
+
+extern "C" JNIEXPORT void JNICALL
+Java_io_redahm_android_GameActivity_setVulkanDriver(JNIEnv* env, jobject thiz, jstring driver_dir,
+                                                    jstring driver_name) {
+  // A user-imported custom Vulkan driver selected in the launcher. driver_dir
+  // is the absolute path of the app-internal folder holding the driver .so
+  // (and optionally libvulkan_freedreno.so); empty strings restore the system
+  // driver.
+  auto to_string = [env](jstring s) -> std::string {
+    if (!s) {
+      return {};
+    }
+    const char* c = env->GetStringUTFChars(s, nullptr);
+    std::string out(c ? c : "");
+    if (c) {
+      env->ReleaseStringUTFChars(s, c);
+    }
+    env->DeleteLocalRef(s);
+    return out;
+  };
+
+  std::string dir = to_string(driver_dir);
+  std::string name = to_string(driver_name);
+  rex::SetAndroidVulkanDriver(dir, name);
+}

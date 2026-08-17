@@ -38,6 +38,12 @@ const std::string& GetAndroidExternalFilesDir();
 const std::string& GetAndroidExternalStorageDir();
 const std::string& GetAndroidCacheDir();
 
+// User-imported custom Vulkan GPU driver (e.g. Mesa Turnip), selected by the
+// Java launcher and applied when VulkanInstance::Create runs. Empty strings
+// mean "use the system libvulkan.so driver".
+void SetAndroidVulkanDriver(const std::string& driver_dir, const std::string& driver_name);
+void GetAndroidVulkanDriver(std::string* driver_dir, std::string* driver_name);
+
 // Java application context, usable by any thread (returns a global reference
 // cast to void*, or nullptr if the JVM was not initialized).
 void* GetAndroidApplicationContext();

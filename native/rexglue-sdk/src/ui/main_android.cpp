@@ -36,6 +36,8 @@ std::string g_external_files_dir;
 std::string g_external_storage_dir;
 std::string g_cache_dir;
 std::string g_app_name;
+std::string g_vulkan_driver_dir;
+std::string g_vulkan_driver_name;
 
 }  // namespace
 
@@ -98,6 +100,22 @@ const std::string& GetAndroidExternalStorageDir() {
 const std::string& GetAndroidCacheDir() {
   std::lock_guard<std::mutex> lock(g_paths_mutex);
   return g_cache_dir;
+}
+
+void SetAndroidVulkanDriver(const std::string& driver_dir, const std::string& driver_name) {
+  std::lock_guard<std::mutex> lock(g_paths_mutex);
+  g_vulkan_driver_dir = driver_dir;
+  g_vulkan_driver_name = driver_name;
+}
+
+void GetAndroidVulkanDriver(std::string* driver_dir, std::string* driver_name) {
+  std::lock_guard<std::mutex> lock(g_paths_mutex);
+  if (driver_dir) {
+    *driver_dir = g_vulkan_driver_dir;
+  }
+  if (driver_name) {
+    *driver_name = g_vulkan_driver_name;
+  }
 }
 
 void* GetAndroidApplicationContext() {

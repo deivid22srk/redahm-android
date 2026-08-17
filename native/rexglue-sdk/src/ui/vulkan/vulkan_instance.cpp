@@ -20,6 +20,9 @@
 #include <rex/platform.h>
 #include <rex/ui/vulkan/instance.h>
 #include <rex/ui/vulkan/presenter.h>
+#if REX_PLATFORM_ANDROID
+#include <rex/main_android.h>
+#endif
 
 REXCVAR_DEFINE_BOOL(vulkan_log_debug_messages, true, "UI/Vulkan", "Log Vulkan debug messages");
 
@@ -40,15 +43,37 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(const bool with_surface,
   Functions& ifn = vulkan_instance->functions_;
 
   bool functions_loaded = true;
-  if (!vulkan_instance->loader_.Load(platform::lib_names::kVulkanLoader)) {
-    REXLOG_ERROR("Failed to load {}", platform::lib_names::kVulkanLoader);
-    return nullptr;
+  bool using_custom_driver = false;
+#if REX_PLATFORM_ANDROID
+  // A user-imported custom GPU driver (e.g. Mesa Turnip) replaces the system
+  // libvulkan.so loader entirely (instance, device, surface and swapchain all
+  // go through the custom driver).
+  std::string custom_driver_dir;
+  std::string custom_driver_name;
+  rex::GetAndroidVulkanDriver(&custom_driver_dir, &custom_driver_name);
+  if (!custom_driver_dir.empty() && !custom_driver_name.empty()) {
+    PFN_vkGetInstanceProcAddr custom_gpa = nullptr;
+    if (!LoadCustomVulkanDriverOnAndroid(custom_driver_dir, custom_driver_name, &custom_gpa)) {
+      REXLOG_ERROR("Failed to load custom Vulkan driver '{}'", custom_driver_name);
+      return nullptr;
+    }
+    ifn.vkGetInstanceProcAddr = custom_gpa;
+    ifn.vkDestroyInstance =
+        reinterpret_cast<PFN_vkDestroyInstance>(custom_gpa(nullptr, "vkDestroyInstance"));
+    using_custom_driver = true;
   }
+#endif
+  if (!using_custom_driver) {
+    if (!vulkan_instance->loader_.Load(platform::lib_names::kVulkanLoader)) {
+      REXLOG_ERROR("Failed to load {}", platform::lib_names::kVulkanLoader);
+      return nullptr;
+    }
 #define XE_VULKAN_LOAD_LOADER_FUNCTION(name) \
   functions_loaded &= (ifn.name = vulkan_instance->loader_.GetSymbol<PFN_##name>(#name)) != nullptr;
-  XE_VULKAN_LOAD_LOADER_FUNCTION(vkGetInstanceProcAddr);
-  XE_VULKAN_LOAD_LOADER_FUNCTION(vkDestroyInstance);
+    XE_VULKAN_LOAD_LOADER_FUNCTION(vkGetInstanceProcAddr);
+    XE_VULKAN_LOAD_LOADER_FUNCTION(vkDestroyInstance);
 #undef XE_VULKAN_LOAD_LOADER_FUNCTION
+  }
   if (!functions_loaded) {
     REXLOG_ERROR("Failed to get Vulkan loader function pointers");
     return nullptr;

@@ -28,6 +28,14 @@ public class GameActivity extends SDLActivity {
         // SDLActivity.loadLibraries() (which loads libSDL3.so and libmain.so),
         // and the SDL main thread only starts after onCreate returns.
         setupNativePaths();
+
+        Intent intent = getIntent();
+        String driverDir = intent == null ? null : intent.getStringExtra(MainActivity.EXTRA_VULKAN_DRIVER_DIR);
+        String driverSo = intent == null ? null : intent.getStringExtra(MainActivity.EXTRA_VULKAN_DRIVER_SO);
+        if (driverDir != null && driverSo != null) {
+            setVulkanDriver(driverDir, driverSo);
+            Log.i(TAG, "Using custom Vulkan driver: " + driverSo + " (" + driverDir + ")");
+        }
     }
 
     @Override
@@ -59,4 +67,7 @@ public class GameActivity extends SDLActivity {
 
     /** Implemented in libmain.so (src/android_bridge.cpp). */
     private native void setupNativePaths();
+
+    /** Implemented in libmain.so (src/android_bridge.cpp). */
+    private native void setVulkanDriver(String driverDir, String driverName);
 }

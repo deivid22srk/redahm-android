@@ -37,6 +37,7 @@ set(REXUI_VULKAN_SOURCES
     vulkan/single_layout_descriptor_set_pool.cpp
     vulkan/spirv_tools_context.cpp
     vulkan/ui_samplers.cpp
+    vulkan/vulkan_custom_driver_android.cpp
     vulkan/vulkan_device.cpp
     vulkan/vulkan_immediate_drawer.cpp
     vulkan/vulkan_instance.cpp
@@ -146,7 +147,7 @@ endif()
 if(ANDROID)
     # ANativeWindow_* (surface_android.cpp) live in libnativewindow/libandroid
     # on modern platforms; they are not part of libc.
-    target_link_libraries(rexui PRIVATE android nativewindow)
+    target_link_libraries(rexui PRIVATE android nativewindow adrenotools)
 elseif(NOT WIN32)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(X11_XCB REQUIRED x11-xcb)

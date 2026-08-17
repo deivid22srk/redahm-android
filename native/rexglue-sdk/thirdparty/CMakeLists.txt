@@ -689,3 +689,7 @@ set_target_properties(libavutil libavcodec PROPERTIES
     C_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
     FOLDER "FFmpeg")
+
+# libadrenotools - custom Adreno GPU driver loading (Android arm64 only).
+# Builds its own hook shared libraries; no-op on non-Android builds.
+add_subdirectory(adrenotools)

@@ -11,6 +11,7 @@
  */
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include <rex/platform.h>
@@ -125,6 +126,15 @@ class VulkanInstance {
 
   VkDebugUtilsMessengerEXT debug_utils_messenger_ = VK_NULL_HANDLE;
 };
+
+#if REX_PLATFORM_ANDROID
+// Loads a user-imported custom Vulkan GPU driver (e.g. Mesa Turnip) via
+// libadrenotools, replacing the system libvulkan.so loader. Implemented in
+// vulkan_custom_driver_android.cpp. Returns false on failure.
+bool LoadCustomVulkanDriverOnAndroid(const std::string& driver_dir,
+                                     const std::string& driver_name,
+                                     PFN_vkGetInstanceProcAddr* out_vk_get_instance_proc_addr);
+#endif
 
 }  // namespace vulkan
 }  // namespace ui

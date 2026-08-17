@@ -140,3 +140,18 @@ redahm-android/
 - App lookup chain verified: REX_DEFINE_APP(redahm,...) + SetAndroidAppName("redahm") + GetCreator by name (XE_UI_WINDOWED_APPS_IN_LIBRARY always 1).
 - Verified: GameActivity + SDLActivity classes in the APK dex; all 5 native libs packaged.
 - Device test (moto g34): APK run 32014478908 -> https://github.com/deivid22srk/redahm-android/actions/runs/32014478908
+
+## 2026-08-17: User-importable custom Vulkan driver (AdrenoTools style)
+- Feature requested by the user, matching https://github.com/SansNope/UnleashedRecomp-Android: a button in the launcher to import a custom Adreno GPU driver (Mesa Turnip) as a `.zip` (AdrenoTools package) or plain `.so`, so the game can use a different Vulkan driver than the system one.
+- Vendored `libadrenotools` + `liblinkernsbypass` (both BSD-2-Clause, the exact libraries UnleashedRecomp-Android uses) into `native/rexglue-sdk/thirdparty/adrenotools/` with a custom CMakeLists (Android-arm64 only, builds the static `adrenotools` lib + the 4 runtime hook shared libs: libhook_impl/libmain_hook/libfile_redirect_hook/libgsl_alloc_hook). Wired into `thirdparty/CMakeLists.txt`.
+- Native integration:
+  - New `src/ui/vulkan/vulkan_custom_driver_android.cpp`: calls `adrenotools_open_libvulkan(RTLD_NOW, ADRENOTOOLS_DRIVER_CUSTOM, cacheDir, nativeLibraryDir, driverDir, driverName, ...)` and returns the driver's `vkGetInstanceProcAddr`.
+  - `vulkan_instance.cpp` `VulkanInstance::Create`: on Android, if a custom driver is configured it replaces the system `libvulkan.so` loader (whole stack: instance/device/surface/swapchain go through the custom driver); otherwise falls back to the system loader.
+  - `main_android.{h,cpp}`: `SetAndroidVulkanDriver`/`GetAndroidVulkanDriver` (thread-safe globals).
+  - `android_bridge.cpp`: new JNI `Java_io_redahm_android_GameActivity_setVulkanDriver(JNIEnv*, jobject, jstring dir, jstring name)`.
+- Java (launcher):
+  - MainActivity: "Driver Vulkan" section — import button (SAF picker, zip or .so), extract into `getFilesDir()/vulkan_drivers/<name>/` (internal storage, required for dlopen), auto-detect main driver .so (libvulkan_turnip.so > libvulkan.so.qualcomm > any non-freedreno .so), "Trocar Driver" dialog (system driver + imported drivers), selection persisted in SharedPreferences and passed to GameActivity via EXTRA_VULKAN_DRIVER_DIR/EXTRA_VULKAN_DRIVER_SO.
+  - GameActivity: calls `setVulkanDriver(dir, name)` after `setupNativePaths()`.
+- Constraints met: `useLegacyPackaging=true` (hook libs must be extracted to nativeLibraryDir); hook libs staged automatically by build-android.sh (the `$SDK/out/android-arm64/*.so` find picks them up).
+- Verified locally: full NDK arm64 build green; libmain.so exports both JNI symbols; librexruntime.so contains `adrenotools_open_libvulkan`; local `./gradlew assembleDebug` green; APK packages all 9 libs (5 runtime + 4 hooks).
+- Next: CI run; on-device test — import a Turnip driver and confirm Vulkan init picks it up (or confirm the stock driver is enough).
