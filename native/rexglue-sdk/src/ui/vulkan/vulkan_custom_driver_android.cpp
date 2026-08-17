@@ -34,12 +34,18 @@ namespace vulkan {
 bool LoadCustomVulkanDriverOnAndroid(const std::string& driver_dir,
                                      const std::string& driver_name,
                                      PFN_vkGetInstanceProcAddr* out_vk_get_instance_proc_addr) {
+  // libadrenotools concatenates customDriverDir + customDriverName directly (no
+  // separator), so the dir must end with a '/'.
+  std::string driver_dir_with_slash = driver_dir;
+  if (driver_dir_with_slash.empty() || driver_dir_with_slash.back() != '/')
+    driver_dir_with_slash += '/';
+
   void* handle = adrenotools_open_libvulkan(
       RTLD_NOW,
       ADRENOTOOLS_DRIVER_CUSTOM,
       rex::GetAndroidCacheDir().c_str(),             // tmpLibDir (memfd on API >= 29)
       rex::GetAndroidNativeLibraryDir().c_str(),     // hookLibDir (must be nativeLibraryDir)
-      driver_dir.c_str(),                            // customDriverDir
+      driver_dir_with_slash.c_str(),                 // customDriverDir
       driver_name.c_str(),                           // customDriverName
       nullptr,                                       // fileRedirectDir
       nullptr);                                      // userMappingHandle

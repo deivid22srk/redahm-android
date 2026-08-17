@@ -188,3 +188,11 @@ redahm-android/
 - Also added a logcat sink to rex logging on Android: `logging.cpp` uses `spdlog::sinks::android_sink_mt("ReDAHM")` for the console sink, and `rex_app.cpp` sets `log_config.log_to_console = true` on Android - so all game logs now appear in logcat too (no more file-only logs for adb debugging).
 - Verified locally: full NDK arm64 build green; librexruntime.so contains all new "adrenotools"/"open_libvulkan" log strings.
 - Next on-device: with the new APK, launch once with Turnip selected and grab logcat filtered to `adb logcat -s adrenotools ReDAHM:*` (plus the game log file). The exact failing step will be identified.
+
+## 2026-08-17: Custom driver load failure found - missing trailing slash on driver dir
+- On-device with the instrumented APK, logcat showed the exact failing step:
+  `E adrenotools: open_libvulkan: custom driver file does not exist: /data/user/0/io.redahm.android/files/vulkan_drivers/Turnip-v26.3.0-20260725-r4-710-720-Testlibvulkan_freedreno.so (errno 2)`
+  -> `stat(dir + name)` fails because libadrenotools concatenates `customDriverDir` + `customDriverName` with NO separator; our driver_dir had no trailing '/'.
+- Also confirmed working: `adrenotools: linkernsbypass: linker bypass initialized successfully` (the linker-namespace bypass is fine on this device) and the new ReDAHM logcat sink (all game logs now visible via `adb logcat -s ReDAHM`).
+- Fix: `LoadCustomVulkanDriverOnAndroid` in `vulkan_custom_driver_android.cpp` appends a trailing '/' to driver_dir when missing before calling `adrenotools_open_libvulkan`. Build green locally.
+- Next on-device: relaunch with the Turnip driver; expect the driver to actually load (watch for `Vulkan device ... driverName` showing Mesa/Turnip). Note: the imported driver is named `Turnip-v26.3.0-...-710-720-Test` (7xx-oriented) on an Adreno 619 - if it loads but crashes/misbehaves, fall back to the WN-Turnip unified build (WN-Turnip-1.06-p_Axxx) which is the "all Adreno" package.
