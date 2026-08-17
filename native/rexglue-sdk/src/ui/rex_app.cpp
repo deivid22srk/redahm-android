@@ -179,6 +179,8 @@ bool ReXApp::SetupEnvironment() {
     // The executable folder is the (read-only) native library dir on Android;
     // logs go next to the user data instead.
     log_config.log_dir = (user_dir / "logs").string();
+    // Forward all game logs to logcat as well (no stdout on Android).
+    log_config.log_to_console = true;
 #else
     log_config.log_dir = (exe_dir / "logs").string();
 #endif

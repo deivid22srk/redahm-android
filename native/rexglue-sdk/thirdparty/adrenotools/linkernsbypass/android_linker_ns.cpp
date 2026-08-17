@@ -129,8 +129,10 @@ static void *align_ptr(void *ptr) {
 __attribute__((constructor)) static void resolve_linker_symbols() {
     using loader_dlopen_t = void *(*)(const char *, int, const void *);
 
-    if (android_get_device_api_level() < 28)
+    if (android_get_device_api_level() < 28) {
+        __android_log_print(ANDROID_LOG_ERROR, "adrenotools", "linkernsbypass: API < 28, bypass unavailable");
         return;
+    }
 
     // ARM64 specific function walking to locate the internal dlopen handler
     auto loader_dlopen{[]() {
@@ -164,29 +166,42 @@ __attribute__((constructor)) static void resolve_linker_symbols() {
 
     // Passing dlopen as a caller address tricks the linker into using the internal unrestricted namespace letting us access libraries that are normally forbidden in the classloader namespace imposed on apps
     auto ldHandle{loader_dlopen("ld-android.so", RTLD_LAZY, reinterpret_cast<void *>(&dlopen))};
-    if (!ldHandle)
+    if (!ldHandle) {
+        __android_log_print(ANDROID_LOG_ERROR, "adrenotools", "linkernsbypass: loader_dlopen(ld-android.so) failed (dlopen walk failed?)");
         return;
+    }
 
     android_link_namespaces_all_libs = reinterpret_cast<android_link_namespaces_all_libs_t>(dlsym(ldHandle, "__loader_android_link_namespaces_all_libs"));
-    if (!android_link_namespaces_all_libs)
+    if (!android_link_namespaces_all_libs) {
+        __android_log_print(ANDROID_LOG_ERROR, "adrenotools", "linkernsbypass: dlsym __loader_android_link_namespaces_all_libs failed");
         return;
+    }
 
     android_link_namespaces = reinterpret_cast<android_link_namespaces_t>(dlsym(ldHandle, "__loader_android_link_namespaces"));
-    if (!android_link_namespaces)
+    if (!android_link_namespaces) {
+        __android_log_print(ANDROID_LOG_ERROR, "adrenotools", "linkernsbypass: dlsym __loader_android_link_namespaces failed");
         return;
+    }
 
     auto libdlAndroidHandle{loader_dlopen("libdl_android.so", RTLD_LAZY, reinterpret_cast<void *>(&dlopen))};
-    if (!libdlAndroidHandle)
+    if (!libdlAndroidHandle) {
+        __android_log_print(ANDROID_LOG_ERROR, "adrenotools", "linkernsbypass: loader_dlopen(libdl_android.so) failed");
         return;
+    }
 
     loader_android_create_namespace = reinterpret_cast<loader_android_create_namespace_t>(dlsym(libdlAndroidHandle, "__loader_android_create_namespace"));
-    if (!loader_android_create_namespace)
+    if (!loader_android_create_namespace) {
+        __android_log_print(ANDROID_LOG_ERROR, "adrenotools", "linkernsbypass: dlsym __loader_android_create_namespace failed");
         return;
+    }
 
     android_get_exported_namespace = reinterpret_cast<android_get_exported_namespace_t>(dlsym(libdlAndroidHandle, "__loader_android_get_exported_namespace"));
-    if (!android_get_exported_namespace)
+    if (!android_get_exported_namespace) {
+        __android_log_print(ANDROID_LOG_ERROR, "adrenotools", "linkernsbypass: dlsym __loader_android_get_exported_namespace failed");
         return;
+    }
 
     // Lib is now safe to use
     lib_loaded = true;
+    __android_log_print(ANDROID_LOG_INFO, "adrenotools", "linkernsbypass: linker bypass initialized successfully");
 }

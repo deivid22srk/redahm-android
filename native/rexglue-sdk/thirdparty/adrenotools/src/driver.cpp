@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <cerrno>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <android/api-level.h>
@@ -16,61 +17,90 @@
 #include <adrenotools/driver.h>
 #include <unistd.h>
 
+#define ALOGE(fmt, ...) __android_log_print(ANDROID_LOG_ERROR, "adrenotools", fmt, ##__VA_ARGS__)
+
 void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) {
     // Bail out if linkernsbypass failed to load, this probably means we're on api < 28
-    if (!linkernsbypass_load_status())
+    if (!linkernsbypass_load_status()) {
+        ALOGE("open_libvulkan: linkernsbypass_load_status failed (linker namespace bypass unavailable)");
         return nullptr;
+    }
 
     // Always use memfd on Q+ since it's guaranteed to work
     if (android_get_device_api_level() >= 29)
         tmpLibDir = nullptr;
 
     // Verify that params for specific features are only passed if they are enabled
-    if (!(featureFlags & ADRENOTOOLS_DRIVER_FILE_REDIRECT) && fileRedirectDir)
+    if (!(featureFlags & ADRENOTOOLS_DRIVER_FILE_REDIRECT) && fileRedirectDir) {
+        ALOGE("open_libvulkan: fileRedirectDir set without ADRENOTOOLS_DRIVER_FILE_REDIRECT flag");
         return nullptr;
+    }
 
-    if (!(featureFlags & ADRENOTOOLS_DRIVER_CUSTOM) && (customDriverDir || customDriverName))
+    if (!(featureFlags & ADRENOTOOLS_DRIVER_CUSTOM) && (customDriverDir || customDriverName)) {
+        ALOGE("open_libvulkan: custom driver params set without ADRENOTOOLS_DRIVER_CUSTOM flag");
         return nullptr;
+    }
 
-    if (!(featureFlags & ADRENOTOOLS_DRIVER_GPU_MAPPING_IMPORT) && userMappingHandle)
+    if (!(featureFlags & ADRENOTOOLS_DRIVER_GPU_MAPPING_IMPORT) && userMappingHandle) {
+        ALOGE("open_libvulkan: userMappingHandle set without ADRENOTOOLS_DRIVER_GPU_MAPPING_IMPORT flag");
         return nullptr;
+    }
 
     // Verify that params for enabled features are correct
     struct stat buf{};
 
     if (featureFlags & ADRENOTOOLS_DRIVER_CUSTOM) {
-        if (!customDriverName || !customDriverDir)
+        if (!customDriverName || !customDriverDir) {
+            ALOGE("open_libvulkan: custom driver enabled but dir/name missing");
             return nullptr;
+        }
 
-        if (stat((std::string(customDriverDir) + customDriverName).c_str(), &buf) != 0)
+        std::string driverPath{std::string(customDriverDir) + customDriverName};
+        if (stat(driverPath.c_str(), &buf) != 0) {
+            ALOGE("open_libvulkan: custom driver file does not exist: %s (errno %d)", driverPath.c_str(), errno);
             return nullptr;
+        }
     }
 
     // Verify that params for enabled features are correct
     if (featureFlags & ADRENOTOOLS_DRIVER_FILE_REDIRECT) {
-        if (!fileRedirectDir)
+        if (!fileRedirectDir) {
+            ALOGE("open_libvulkan: file redirect enabled but dir missing");
             return nullptr;
+        }
 
-        if (stat(fileRedirectDir, &buf) != 0)
+        if (stat(fileRedirectDir, &buf) != 0) {
+            ALOGE("open_libvulkan: file redirect dir does not exist: %s", fileRedirectDir);
             return nullptr;
+        }
     }
 
     // Create a namespace that can isolate our hook from the classloader namespace
     auto hookNs{android_create_namespace("adrenotools-libvulkan", hookLibDir, nullptr, ANDROID_NAMESPACE_TYPE_SHARED, nullptr, nullptr)};
+    if (!hookNs) {
+        ALOGE("open_libvulkan: android_create_namespace failed (hookLibDir=%s)", hookLibDir ? hookLibDir : "(null)");
+        return nullptr;
+    }
 
     // Link it to the default namespace so the hook can use libandroid etc
-    if (!linkernsbypass_link_namespace_to_default_all_libs(hookNs))
+    if (!linkernsbypass_link_namespace_to_default_all_libs(hookNs)) {
+        ALOGE("open_libvulkan: link_namespace_to_default_all_libs failed");
         return nullptr;
+    }
 
     // Preload the hook implementation, otherwise we get a weird issue where despite being in NEEDED of the hook lib the hook's symbols will overwrite ours and cause an infinite loop
     auto hookImpl{linkernsbypass_namespace_dlopen("libhook_impl.so", RTLD_NOW, hookNs)};
-    if (!hookImpl)
+    if (!hookImpl) {
+        ALOGE("open_libvulkan: failed to dlopen libhook_impl.so from %s: %s", hookLibDir, dlerror());
         return nullptr;
+    }
 
     // Pass parameters to the hook implementation
     auto initHookParam{reinterpret_cast<void (*)(const void *)>(dlsym(hookImpl, "init_hook_param"))};
-    if (!initHookParam)
+    if (!initHookParam) {
+        ALOGE("open_libvulkan: libhook_impl.so missing init_hook_param symbol");
         return nullptr;
+    }
 
 
     auto importMapping{[&]() -> adrenotools_gpu_mapping * {
@@ -87,10 +117,18 @@ void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *
     initHookParam(new HookImplParams(featureFlags, tmpLibDir, hookLibDir, customDriverDir, customDriverName, fileRedirectDir, importMapping));
 
     // Load the libvulkan hook into the isolated namespace
-    if (!linkernsbypass_namespace_dlopen("libmain_hook.so", RTLD_GLOBAL, hookNs))
+    if (!linkernsbypass_namespace_dlopen("libmain_hook.so", RTLD_GLOBAL, hookNs)) {
+        ALOGE("open_libvulkan: failed to dlopen libmain_hook.so from %s: %s", hookLibDir, dlerror());
         return nullptr;
+    }
 
-    return linkernsbypass_namespace_dlopen_unique("/system/lib64/libvulkan.so", tmpLibDir, dlopenFlags, hookNs);
+    auto handle{linkernsbypass_namespace_dlopen_unique("/system/lib64/libvulkan.so", tmpLibDir, dlopenFlags, hookNs)};
+    if (!handle) {
+        ALOGE("open_libvulkan: failed to dlopen patched libvulkan.so (memfd): %s", dlerror());
+        return nullptr;
+    }
+    ALOGE("open_libvulkan: SUCCESS loading libvulkan.so + custom driver %s%s", customDriverName ? customDriverName : "", customDriverName ? "" : " (no custom)");
+    return handle;
 }
 
 bool adrenotools_import_user_mem(void *handle, void *hostPtr, uint64_t size) {

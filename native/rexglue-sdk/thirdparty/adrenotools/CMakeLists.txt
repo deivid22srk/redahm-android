@@ -24,7 +24,7 @@ add_library(linkernsbypass STATIC
     linkernsbypass/elf_soname_patcher.h
 )
 target_compile_options(linkernsbypass PRIVATE -Wall -Wextra)
-target_link_libraries(linkernsbypass android dl)
+target_link_libraries(linkernsbypass android dl log)
 target_include_directories(linkernsbypass PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/linkernsbypass)
 
@@ -43,7 +43,7 @@ target_include_directories(adrenotools PUBLIC
 target_include_directories(adrenotools PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR})  # For gen/ and src/hook/ relative includes
 target_compile_options(adrenotools PRIVATE -Wall -Wextra)
-target_link_libraries(adrenotools android linkernsbypass)
+target_link_libraries(adrenotools android linkernsbypass log)
 
 #=============================================================================
 # Hook shared libraries (dlopened by adrenotools from the native library dir).

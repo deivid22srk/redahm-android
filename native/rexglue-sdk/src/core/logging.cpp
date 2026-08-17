@@ -19,6 +19,9 @@
 
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
+#if REX_PLATFORM_ANDROID
+#include <spdlog/sinks/android_sink.h>
+#endif
 
 #include <toml++/toml.hpp>
 
@@ -210,10 +213,18 @@ void InitLogging(const LogConfig& config) {
 
   // Console sink (stdout, colored). Intended for console-subsystem processes.
   if (config.log_to_console) {
+#if REX_PLATFORM_ANDROID
+    // Android has no stdout; forward to logcat so game logs are visible via adb.
+    auto sink = std::make_shared<spdlog::sinks::android_sink_mt>("ReDAHM");
+    sink->set_level(spdlog::level::trace);
+    sink->set_pattern(config.console_pattern);
+    g_console_sink = sink;
+#else
     auto sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
     sink->set_level(spdlog::level::trace);
     sink->set_pattern(config.console_pattern);
     g_console_sink = sink;
+#endif
   }
 
   // File sink (rotating) with sequential naming fallback

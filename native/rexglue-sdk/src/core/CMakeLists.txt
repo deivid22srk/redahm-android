@@ -97,8 +97,9 @@ target_include_directories(rexcore PRIVATE
 if(UNIX)
     if(ANDROID)
         # bionic merged pthread/rt/dl into libc (and libdl is a stub); linking
-        # -lpthread/-lrt fails because those libraries do not exist.
-        target_link_libraries(rexcore PRIVATE dl)
+        # -lpthread/-lrt fails because those libraries do not exist. liblog is
+        # needed for the spdlog android_sink (logcat).
+        target_link_libraries(rexcore PRIVATE dl log)
     else()
         target_link_libraries(rexcore PRIVATE pthread rt dl)
     endif()

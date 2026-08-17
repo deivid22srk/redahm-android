@@ -177,3 +177,14 @@ redahm-android/
   - `extractDriverZip`: skip extraction when the output file already exists (keep the first/root-level copy; per-device subfolder variants share basenames) and `setExecutable(true, false)` on extracted `.so`.
 - `libdolphin.so` log spam explained: `Unable to open libdolphin.so` is a benign Android system message (also emitted by SurfaceFlinger and unrelated apps; a Qualcomm vendor probe) - not from this app.
 - Next: CI run for this fix; user re-imports WN-Turnip-1.06-p_Axxx.zip and confirms the Vulkan init log shows the Turnip/Mesa driver name instead of the Qualcomm stock driver.
+
+## 2026-08-17: Turnip selected but game exits instantly -> instrumenting adrenotools
+- On-device (run 32036671319 APK): with the Turnip driver selected, the game now starts AND the driver is found (`Using custom Vulkan driver: libvulkan_freedreno.so (/data/user/0/io.redahm.android/files/vulkan_drivers/WN-Turnip-1.06-p_Axxx)` - the findDriverSo fix works), but `SDL_main` returns instantly and the app goes back to the launcher.
+- Game log shows: `Failed to open custom Vulkan driver 'libvulkan_freedreno.so' from ...` -> `Unable to create graphics provider` -> `Graphics presentation setup failed: C0000001`. So `adrenotools_open_libvulkan()` returned NULL.
+- libadrenotools + linkernsbypass are SILENT on failure (return nullptr without logging), so the exact failing step is unknown. Instrumented both:
+  - `thirdparty/adrenotools/src/driver.cpp`: `__android_log_print(ANDROID_LOG_ERROR, "adrenotools", ...)` at every `return nullptr` (linkernsbypass load status, param checks, stat of driver file, android_create_namespace, link_namespace_to_default_all_libs, libhook_impl.so dlopen, init_hook_param dlsym, libmain_hook.so dlopen, patched libvulkan memfd dlopen) + a SUCCESS line.
+  - `thirdparty/adrenotools/linkernsbypass/android_linker_ns.cpp`: logs every `resolve_linker_symbols()` constructor failure (API<28, ld-android.so open, each dlsym) and success.
+  - Added `log` to the link libraries of `adrenotools`, `linkernsbypass`, and `rexcore` (for the spdlog android_sink).
+- Also added a logcat sink to rex logging on Android: `logging.cpp` uses `spdlog::sinks::android_sink_mt("ReDAHM")` for the console sink, and `rex_app.cpp` sets `log_config.log_to_console = true` on Android - so all game logs now appear in logcat too (no more file-only logs for adb debugging).
+- Verified locally: full NDK arm64 build green; librexruntime.so contains all new "adrenotools"/"open_libvulkan" log strings.
+- Next on-device: with the new APK, launch once with Turnip selected and grab logcat filtered to `adb logcat -s adrenotools ReDAHM:*` (plus the game log file). The exact failing step will be identified.
