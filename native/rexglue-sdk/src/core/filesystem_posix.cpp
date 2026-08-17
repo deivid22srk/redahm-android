@@ -77,7 +77,14 @@ std::filesystem::path GetExecutablePath() {
 #endif
 
 std::filesystem::path GetExecutableFolder() {
+#if REX_PLATFORM_ANDROID
+  // The native library directory (already ABI-resolved, e.g.
+  // /data/app/<pkg>/lib/arm64) is where the GPU plugin and runtime libs live;
+  // it plays the role of the executable folder.
+  return rex::GetAndroidNativeLibraryDir();
+#else
   return GetExecutablePath().parent_path();
+#endif
 }
 
 std::filesystem::path GetUserFolder() {

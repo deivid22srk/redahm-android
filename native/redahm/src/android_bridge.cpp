@@ -11,6 +11,7 @@
 
 #include <jni.h>
 
+#include <filesystem>
 #include <string>
 
 #include <rex/main_android.h>
@@ -73,6 +74,24 @@ Java_io_redahm_android_GameActivity_setupNativePaths(JNIEnv* env, jobject thiz) 
     jstring s = static_cast<jstring>(env->GetObjectField(app_info, native_dir));
     env->DeleteLocalRef(app_info);
     native_library_dir = str_from_jstring(s);
+  }
+
+  // ApplicationInfo.nativeLibraryDir points at the base native lib dir
+  // (e.g. /data/app/<pkg>/lib); the actual .so files are in the ABI subdir
+  // below it (e.g. .../lib/arm64). Resolve that subdir by looking for a
+  // directory that contains libSDL3.so (SDLActivity loads it first).
+  {
+    std::filesystem::path base(native_library_dir);
+    std::error_code ec;
+    std::filesystem::directory_iterator it(base, ec);
+    for (; !ec && it != std::filesystem::directory_iterator(); it.increment(ec)) {
+      const auto& entry = *it;
+      if (entry.is_directory() &&
+          std::filesystem::exists(entry.path() / "libSDL3.so", ec)) {
+        native_library_dir = entry.path().string();
+        break;
+      }
+    }
   }
 
   std::string internal_data_dir = str_from_file(env->CallObjectMethod(thiz, get_files));
