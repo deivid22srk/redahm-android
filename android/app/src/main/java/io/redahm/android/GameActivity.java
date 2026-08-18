@@ -2,6 +2,7 @@ package io.redahm.android;
 
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.res.AssetManager;
 import android.hardware.input.InputManager;
 import android.os.Bundle;
 import android.util.Log;
@@ -15,6 +16,9 @@ import org.libsdl.app.SDLActivity;
 import org.libsdl.app.SDLControllerManager;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -42,6 +46,7 @@ public class GameActivity extends SDLActivity implements InputManager.InputDevic
         // SDLActivity.loadLibraries() (which loads libSDL3.so and libmain.so),
         // and the SDL main thread only starts after onCreate returns.
         setupNativePaths();
+        installDefaultConfig();
 
         Intent intent = getIntent();
         String driverDir = intent == null ? null : intent.getStringExtra(MainActivity.EXTRA_VULKAN_DRIVER_DIR);
@@ -55,6 +60,45 @@ public class GameActivity extends SDLActivity implements InputManager.InputDevic
         inputManager = (InputManager) getSystemService(INPUT_SERVICE);
         inputManager.registerInputDeviceListener(this, null);
         updateVirtualGamepadVisibility();
+    }
+
+    /**
+     * Copies the bundled {@code assets/redahm.toml} performance profile to
+     * {@code <user_data_root>/redahm.toml} on first launch. The native runtime
+     * loads that file before starting the game, so the file must be in place
+     * before the SDL main thread runs (i.e. before onCreate returns).
+     */
+    private void installDefaultConfig() {
+        try {
+            File userRoot = new File(getExternalFilesDir(null), "user");
+            File configFile = new File(userRoot, "redahm.toml");
+            if (configFile.exists()) {
+                return;
+            }
+            if (!userRoot.exists() && !userRoot.mkdirs()) {
+                Log.w(TAG, "Unable to create user data dir: " + userRoot);
+                return;
+            }
+            AssetManager assets = getAssets();
+            InputStream in = null;
+            OutputStream out = null;
+            try {
+                in = assets.open("redahm.toml");
+                out = new FileOutputStream(configFile);
+                byte[] buffer = new byte[16384];
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, read);
+                }
+                out.flush();
+                Log.i(TAG, "Installed default performance config: " + configFile);
+            } finally {
+                if (in != null) in.close();
+                if (out != null) out.close();
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to install default performance config", e);
+        }
     }
 
     private void installVirtualGamepad() {

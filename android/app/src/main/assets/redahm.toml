@@ -1,0 +1,19 @@
+# ReDAHM performance profile (installed to <user_data_root>/redahm.toml
+# on first launch; the runtime loads this before starting the game).
+#
+# Diagnosed on moto g34 5G (Adreno 619, Turnip Mesa 26.3.0-devel):
+# - Async shader compilation queued thousands of pipeline builds; the GPU
+#   worker blocked waiting for them while frames using placeholder pipelines
+#   were skipped entirely (PERF: exec_busy=100%, fps=0, frame_time_us~400000).
+# - TU_DEBUG=sysmem forced untiled rendering, disabling GMEM tiling, and
+#   push_consts_per_stage caused ~20 lines/frame of log spam.
+#
+# These settings force synchronous pipeline creation (frames are presented
+# even while new shaders compile; warm-up stutter beats skipped frames) and
+# restore normal tiled rendering on Turnip.
+
+async_shader_compilation = false
+
+turnip_debug = ""
+
+disable_motion_blur = true
