@@ -64,15 +64,17 @@ public class GameActivity extends SDLActivity implements InputManager.InputDevic
 
     /**
      * Copies the bundled {@code assets/redahm.toml} performance profile to
-     * {@code <user_data_root>/redahm.toml} on first launch. The native runtime
-     * loads that file before starting the game, so the file must be in place
-     * before the SDL main thread runs (i.e. before onCreate returns).
+     * {@code <user_data_root>/redahm.toml} on first launch (or whenever the
+     * bundled profile is newer). The native runtime loads that file before
+     * starting the game, so the file must be in place before the SDL main
+     * thread runs (i.e. before onCreate returns).
      */
     private void installDefaultConfig() {
+        final int bundledVersion = 2;
         try {
             File userRoot = new File(getExternalFilesDir(null), "user");
             File configFile = new File(userRoot, "redahm.toml");
-            if (configFile.exists()) {
+            if (configFile.exists() && installedConfigVersion(configFile) >= bundledVersion) {
                 return;
             }
             if (!userRoot.exists() && !userRoot.mkdirs()) {
@@ -91,13 +93,24 @@ public class GameActivity extends SDLActivity implements InputManager.InputDevic
                     out.write(buffer, 0, read);
                 }
                 out.flush();
-                Log.i(TAG, "Installed default performance config: " + configFile);
+                Log.i(TAG, "Installed default performance config v" + bundledVersion + ": " + configFile);
             } finally {
                 if (in != null) in.close();
                 if (out != null) out.close();
             }
         } catch (Exception e) {
             Log.w(TAG, "Failed to install default performance config", e);
+        }
+    }
+
+    private static int installedConfigVersion(File configFile) {
+        try {
+            String content = new String(java.nio.file.Files.readAllBytes(configFile.toPath()));
+            java.util.regex.Matcher matcher =
+                    java.util.regex.Pattern.compile("config_version\\s*=\\s*(\\d+)").matcher(content);
+            return matcher.find() ? Integer.parseInt(matcher.group(1)) : 0;
+        } catch (Exception e) {
+            return 0;
         }
     }
 

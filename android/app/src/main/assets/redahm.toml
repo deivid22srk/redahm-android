@@ -1,19 +1,29 @@
 # ReDAHM performance profile (installed to <user_data_root>/redahm.toml
 # on first launch; the runtime loads this before starting the game).
 #
+# config_version: bumped whenever the tuning below changes; the launcher
+# reinstalls this file if the installed version is older.
+config_version = 2
+#
 # Diagnosed on moto g34 5G (Adreno 619, Turnip Mesa 26.3.0-devel):
 # - Async shader compilation queued thousands of pipeline builds; the GPU
 #   worker blocked waiting for them while frames using placeholder pipelines
 #   were skipped entirely (PERF: exec_busy=100%, fps=0, frame_time_us~400000).
 # - TU_DEBUG=sysmem forced untiled rendering, disabling GMEM tiling, and
 #   push_consts_per_stage caused ~20 lines/frame of log spam.
+# - Round 2: even with async compilation off, the GPU worker remains 100%
+#   busy during gameplay while the present path waits on the FIFO vsync
+#   fence; readback/memexport coherency paths add per-frame CPU cost. The
+#   device also only exposes FIFO presentation (mode 1).
 #
-# These settings force synchronous pipeline creation (frames are presented
-# even while new shaders compile; warm-up stutter beats skipped frames) and
-# restore normal tiled rendering on Turnip.
-
+# Round 1 (worked, partial): synchronous pipeline creation + tiled rendering.
 async_shader_compilation = false
-
 turnip_debug = ""
-
 disable_motion_blur = true
+#
+# Round 2: reduce CPU cost in the command/submission path and stop frame
+# pacing from blocking on the display vsync while the worker is behind.
+vsync = false
+clear_memory_page_state = false
+occlusion_query_enable = false
+readback_memexport = false
