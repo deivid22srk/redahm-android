@@ -158,7 +158,7 @@ public class MainActivity extends Activity {
         MaterialButton start = new MaterialButton(this, null,
                 com.google.android.material.R.attr.materialButtonStyle);
         start.setText("Iniciar jogo");
-        start.setTextAllCaps(false);
+        start.setAllCaps(false);
         start.setOnClickListener(v -> startGame());
         content.addView(start, topMargin(dp(24)));
 
@@ -250,15 +250,15 @@ public class MainActivity extends Activity {
         MaterialButton button = new MaterialButton(this, null,
                 com.google.android.material.R.attr.materialButtonOutlinedStyle);
         button.setText(text);
-        button.setTextAllCaps(false);
+        button.setAllCaps(false);
         return button;
     }
 
     private MaterialButton textButton(String text) {
         MaterialButton button = new MaterialButton(this, null,
-                com.google.android.material.R.attr.materialButtonTextStyle);
+                com.google.android.material.R.attr.borderlessButtonStyle);
         button.setText(text);
-        button.setTextAllCaps(false);
+        button.setAllCaps(false);
         return button;
     }
 
