@@ -1,10 +1,18 @@
 package io.redahm.android;
 
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.hardware.input.InputManager;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.InputDevice;
+import android.view.KeyEvent;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.RelativeLayout;
 
 import org.libsdl.app.SDLActivity;
+import org.libsdl.app.SDLControllerManager;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -17,12 +25,18 @@ import java.util.List;
  * Runs in its own process (android:process=":game") so each launch starts with
  * a fresh SDL native state.
  */
-public class GameActivity extends SDLActivity {
+public class GameActivity extends SDLActivity implements InputManager.InputDeviceListener {
     private static final String TAG = "ReDAHM";
+    private static final int VIRTUAL_JOYSTICK_ID = -31337;
+
+    private VirtualGamepadView virtualGamepad;
+    private boolean virtualJoystickRegistered;
+    private InputManager inputManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
 
         // Safe to call here: super.onCreate() already ran
         // SDLActivity.loadLibraries() (which loads libSDL3.so and libmain.so),
@@ -36,6 +50,100 @@ public class GameActivity extends SDLActivity {
             setVulkanDriver(driverDir, driverSo);
             Log.i(TAG, "Using custom Vulkan driver: " + driverSo + " (" + driverDir + ")");
         }
+
+        installVirtualGamepad();
+        inputManager = (InputManager) getSystemService(INPUT_SERVICE);
+        inputManager.registerInputDeviceListener(this, null);
+        updateVirtualGamepadVisibility();
+    }
+
+    private void installVirtualGamepad() {
+        View content = SDLActivity.getContentView();
+        if (!(content instanceof ViewGroup)) {
+            Log.w(TAG, "SDL content layout unavailable; virtual gamepad not installed");
+            return;
+        }
+        virtualGamepad = new VirtualGamepadView(this);
+        virtualGamepad.setListener(new VirtualGamepadView.Listener() {
+            @Override public void onButton(String id, boolean pressed) {
+                SDLControllerManager.dispatchVirtualButton(VIRTUAL_JOYSTICK_ID, keyCodeFor(id), pressed);
+            }
+
+            @Override public void onAxis(String id, float x, float y) {
+                if ("LS".equals(id)) {
+                    SDLControllerManager.dispatchVirtualAxis(VIRTUAL_JOYSTICK_ID, 0, x);
+                    SDLControllerManager.dispatchVirtualAxis(VIRTUAL_JOYSTICK_ID, 1, y);
+                } else if ("RS".equals(id)) {
+                    SDLControllerManager.dispatchVirtualAxis(VIRTUAL_JOYSTICK_ID, 2, x);
+                    SDLControllerManager.dispatchVirtualAxis(VIRTUAL_JOYSTICK_ID, 3, y);
+                }
+            }
+        });
+        ((ViewGroup) content).addView(virtualGamepad, new RelativeLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    private static int keyCodeFor(String id) {
+        switch (id) {
+            case "A": return KeyEvent.KEYCODE_BUTTON_A;
+            case "B": return KeyEvent.KEYCODE_BUTTON_B;
+            case "X": return KeyEvent.KEYCODE_BUTTON_X;
+            case "Y": return KeyEvent.KEYCODE_BUTTON_Y;
+            case "LB": return KeyEvent.KEYCODE_BUTTON_L1;
+            case "RB": return KeyEvent.KEYCODE_BUTTON_R1;
+            case "LT": return KeyEvent.KEYCODE_BUTTON_L2;
+            case "RT": return KeyEvent.KEYCODE_BUTTON_R2;
+            case "L3": return KeyEvent.KEYCODE_BUTTON_THUMBL;
+            case "R3": return KeyEvent.KEYCODE_BUTTON_THUMBR;
+            case "VIEW": return KeyEvent.KEYCODE_BUTTON_SELECT;
+            case "SHARE": return KeyEvent.KEYCODE_BUTTON_SELECT;
+            case "MENU": return KeyEvent.KEYCODE_BUTTON_START;
+            case "GUIDE": return KeyEvent.KEYCODE_BUTTON_MODE;
+            case "DPAD_U": return KeyEvent.KEYCODE_DPAD_UP;
+            case "DPAD_D": return KeyEvent.KEYCODE_DPAD_DOWN;
+            case "DPAD_L": return KeyEvent.KEYCODE_DPAD_LEFT;
+            case "DPAD_R": return KeyEvent.KEYCODE_DPAD_RIGHT;
+            default: return KeyEvent.KEYCODE_UNKNOWN;
+        }
+    }
+
+    private boolean hasPhysicalGamepad() {
+        for (int id : InputDevice.getDeviceIds()) {
+            InputDevice device = InputDevice.getDevice(id);
+            if (device == null || device.isVirtual()) continue;
+            int sources = device.getSources();
+            if ((sources & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+                    || (sources & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+                    || (sources & InputDevice.SOURCE_DPAD) == InputDevice.SOURCE_DPAD) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void updateVirtualGamepadVisibility() {
+        if (virtualGamepad == null) return;
+        boolean show = !hasPhysicalGamepad();
+        virtualGamepad.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (show && !virtualJoystickRegistered) {
+            SDLControllerManager.addVirtualJoystick(VIRTUAL_JOYSTICK_ID, "ReDAHM Touch Gamepad");
+            virtualJoystickRegistered = true;
+        } else if (!show && virtualJoystickRegistered) {
+            SDLControllerManager.removeVirtualJoystick(VIRTUAL_JOYSTICK_ID);
+            virtualJoystickRegistered = false;
+        }
+        Log.i(TAG, show ? "Virtual gamepad shown" : "Physical gamepad detected; virtual gamepad hidden");
+    }
+
+    @Override public void onInputDeviceAdded(int deviceId) { updateVirtualGamepadVisibility(); }
+    @Override public void onInputDeviceRemoved(int deviceId) { updateVirtualGamepadVisibility(); }
+    @Override public void onInputDeviceChanged(int deviceId) { updateVirtualGamepadVisibility(); }
+
+    @Override protected void onDestroy() {
+        if (inputManager != null) inputManager.unregisterInputDeviceListener(this);
+        if (virtualJoystickRegistered) SDLControllerManager.removeVirtualJoystick(VIRTUAL_JOYSTICK_ID);
+        virtualJoystickRegistered = false;
+        super.onDestroy();
     }
 
     @Override
@@ -64,6 +172,7 @@ public class GameActivity extends SDLActivity {
     protected String[] getLibraries() {
         return new String[] {"SDL3", "main"};
     }
+
 
     /** Implemented in libmain.so (src/android_bridge.cpp). */
     private native void setupNativePaths();

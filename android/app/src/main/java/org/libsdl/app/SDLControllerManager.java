@@ -41,6 +41,32 @@ public class SDLControllerManager
     static native void onNativeHat(int device_id, int hat_id,
                                           int x, int y);
 
+    /**
+     * Registers a touch overlay as a normal SDL joystick. Keeping this bridge in
+     * SDLControllerManager means the game receives the same events and mappings
+     * used by physical Android controllers.
+     */
+    public static void addVirtualJoystick(int deviceId, String name) {
+        nativeAddJoystick(deviceId, name, "redahm-touch-gamepad", 0, 0,
+                0x0000FFFF, 6, 0x003F, 1, false, false);
+    }
+
+    public static void removeVirtualJoystick(int deviceId) {
+        nativeRemoveJoystick(deviceId);
+    }
+
+    public static void dispatchVirtualButton(int deviceId, int keyCode, boolean pressed) {
+        if (pressed) {
+            onNativePadDown(deviceId, keyCode);
+        } else {
+            onNativePadUp(deviceId, keyCode);
+        }
+    }
+
+    public static void dispatchVirtualAxis(int deviceId, int axis, float value) {
+        onNativeJoy(deviceId, axis, Math.max(-1.0f, Math.min(1.0f, value)));
+    }
+
     protected static SDLJoystickHandler mJoystickHandler;
     protected static SDLHapticHandler mHapticHandler;
 
