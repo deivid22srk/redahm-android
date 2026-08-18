@@ -1,26 +1,34 @@
 package io.redahm.android;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.OpenableColumns;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.Log;
 import android.util.TypedValue;
-import android.view.Gravity;
 import android.view.View;
-import android.widget.Button;
+import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.color.MaterialColors;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.divider.MaterialDivider;
+import com.google.android.material.textview.MaterialTextView;
+import com.google.android.material.appbar.MaterialToolbar;
 
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -91,102 +99,174 @@ public class MainActivity extends Activity {
     }
 
     private View buildLayout() {
-        float dp = getResources().getDisplayMetrics().density;
-        int pad = (int) (16 * dp);
-        int margin = (int) (12 * dp);
+        int spacing16 = dp(16);
+        int spacing24 = dp(24);
+
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setBackgroundColor(MaterialColors.getColor(page,
+                com.google.android.material.R.attr.colorSurface));
+
+        MaterialToolbar toolbar = new MaterialToolbar(this);
+        toolbar.setTitle("ReDAHM");
+        toolbar.setSubtitle("Launcher do jogo");
+        toolbar.setTitleCentered(false);
+        page.addView(toolbar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         ScrollView scroll = new ScrollView(this);
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(pad, (int) (24 * dp), pad, pad);
+        scroll.setClipToPadding(false);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(spacing16, spacing24, spacing16, spacing24);
+        scroll.addView(content);
+        page.addView(scroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        TextView title = new TextView(this);
-        title.setText("ReDAHM");
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28);
-        title.setGravity(Gravity.CENTER);
-        root.addView(title);
+        MaterialTextView title = heading("Prepare sua sessão");
+        content.addView(title);
 
-        TextView subtitle = new TextView(this);
-        subtitle.setText("Destroy All Humans! Path of the Furon (recompilação)\n"
-                + "Selecione a pasta com o jogo extraído (default.xex + KronosGame) ou um ISO.");
-        subtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        subtitle.setPadding(0, (int) (6 * dp), 0, (int) (16 * dp));
-        root.addView(subtitle);
+        MaterialTextView subtitle = bodyText(
+                "Selecione os dados extraídos do seu jogo ou escolha um arquivo ISO. "
+                        + "Os dados extraídos precisam conter default.xex e a pasta KronosGame.");
+        subtitle.setPadding(0, dp(6), 0, spacing16);
+        content.addView(subtitle);
 
-        Button pickDir = new Button(this);
-        pickDir.setText("Selecionar Pasta do Jogo");
+        MaterialCardView gameCard = sectionCard();
+        LinearLayout gameContent = cardContent(gameCard);
+        gameContent.addView(sectionTitle("Dados do jogo"));
+        gameContent.addView(bodyText("Escolha uma pasta já extraída, pronta para iniciar."));
+        MaterialButton pickDir = outlinedButton("Selecionar pasta do jogo");
         pickDir.setOnClickListener(v -> openFolderPicker());
-        root.addView(pickDir, layoutParams(margin));
+        gameContent.addView(pickDir, topMargin(dp(16)));
+        gameDirText = statusText();
+        gameContent.addView(gameDirText, topMargin(dp(12)));
+        content.addView(gameCard, topMargin(dp(8)));
 
-        gameDirText = new TextView(this);
-        gameDirText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        gameDirText.setPadding(0, (int) (4 * dp), 0, (int) (10 * dp));
-        root.addView(gameDirText);
-
-        Button pickIso = new Button(this);
-        pickIso.setText("Selecionar ISO");
+        MaterialCardView isoCard = sectionCard();
+        LinearLayout isoContent = cardContent(isoCard);
+        isoContent.addView(sectionTitle("Imagem ISO"));
+        isoContent.addView(bodyText("O seletor exibirá arquivos .iso. A ISO escolhida é salva para "
+                + "referência; o jogo ainda precisa estar extraído em uma pasta para ser iniciado."));
+        MaterialButton pickIso = outlinedButton("Selecionar arquivo ISO");
         pickIso.setOnClickListener(v -> openIsoPicker());
-        root.addView(pickIso, layoutParams(margin));
+        isoContent.addView(pickIso, topMargin(dp(16)));
+        isoText = statusText();
+        isoContent.addView(isoText, topMargin(dp(12)));
+        content.addView(isoCard, topMargin(dp(16)));
 
-        isoText = new TextView(this);
-        isoText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        isoText.setPadding(0, (int) (4 * dp), 0, (int) (10 * dp));
-        root.addView(isoText);
-
-        TextView hint = new TextView(this);
-        hint.setText("A pasta do jogo deve conter default.xex e a subpasta KronosGame.\n"
-                + "Para um ISO, extraia o conteúdo para uma pasta (com o mesmo nome do ISO) "
-                + "e selecione a pasta.");
-        hint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        hint.setPadding(0, 0, 0, (int) (14 * dp));
-        root.addView(hint);
-
-        Button start = new Button(this);
-        start.setText("Iniciar Jogo");
+        MaterialButton start = new MaterialButton(this, null,
+                com.google.android.material.R.attr.materialButtonStyle);
+        start.setText("Iniciar jogo");
+        start.setTextAllCaps(false);
         start.setOnClickListener(v -> startGame());
-        root.addView(start, layoutParams(margin));
+        content.addView(start, topMargin(dp(24)));
 
-        TextView driverTitle = new TextView(this);
-        driverTitle.setText("Driver Vulkan");
-        driverTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
-        driverTitle.setGravity(Gravity.CENTER);
-        driverTitle.setPadding(0, (int) (20 * dp), 0, (int) (4 * dp));
-        root.addView(driverTitle);
+        MaterialDivider divider = new MaterialDivider(this);
+        content.addView(divider, topMargin(dp(28)));
 
-        TextView driverHint = new TextView(this);
-        driverHint.setText("Opcional: importe um driver Vulkan personalizado (ex.: Mesa Turnip) "
-                + "para GPUs Adreno. Aceita um .zip de driver (pacote AdrenoTools) ou um .so."
-                + "\nUse apenas drivers de fontes confiáveis — um driver incompatível pode travar.");
-        driverHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        driverHint.setPadding(0, 0, 0, (int) (8 * dp));
-        root.addView(driverHint);
+        MaterialTextView driverTitle = heading("Driver Vulkan");
+        driverTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        content.addView(driverTitle, topMargin(dp(24)));
+        content.addView(bodyText("Opcional: importe um driver Vulkan personalizado para GPUs Adreno. "
+                + "São aceitos pacotes .zip (AdrenoTools) e bibliotecas .so. Use somente fontes confiáveis."));
 
-        Button importDriver = new Button(this);
-        importDriver.setText("Importar Driver Vulkan (.zip / .so)");
+        MaterialCardView driverCard = sectionCard();
+        LinearLayout driverContent = cardContent(driverCard);
+        MaterialButton importDriver = outlinedButton("Importar driver Vulkan");
         importDriver.setOnClickListener(v -> openDriverPicker());
-        root.addView(importDriver, layoutParams(margin));
-
-        driverText = new TextView(this);
-        driverText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        driverText.setPadding(0, (int) (4 * dp), 0, (int) (10 * dp));
-        root.addView(driverText);
-
-        Button chooseDriver = new Button(this);
-        chooseDriver.setText("Trocar Driver");
+        driverContent.addView(importDriver);
+        driverText = statusText();
+        driverContent.addView(driverText, topMargin(dp(12)));
+        MaterialButton chooseDriver = textButton("Trocar driver");
         chooseDriver.setOnClickListener(v -> openDriverChooser());
-        root.addView(chooseDriver, layoutParams(margin));
+        driverContent.addView(chooseDriver, topMargin(dp(8)));
+        content.addView(driverCard, topMargin(dp(12)));
 
-        scroll.addView(root);
-        return scroll;
+        return page;
     }
 
-    private LinearLayout.LayoutParams layoutParams(int margin) {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = margin;
-        lp.bottomMargin = margin;
-        return lp;
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private MaterialCardView sectionCard() {
+        MaterialCardView card = new MaterialCardView(this);
+        card.setCardElevation(0f);
+        card.setStrokeWidth(dp(1));
+        card.setStrokeColor(MaterialColors.getColor(card,
+                com.google.android.material.R.attr.colorOutlineVariant));
+        card.setCardBackgroundColor(MaterialColors.getColor(card,
+                com.google.android.material.R.attr.colorSurfaceContainerLow));
+        card.setRadius(dp(20));
+        return card;
+    }
+
+    private LinearLayout cardContent(MaterialCardView card) {
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(20), dp(20), dp(20), dp(20));
+        card.addView(content);
+        return content;
+    }
+
+    private MaterialTextView heading(String text) {
+        MaterialTextView view = new MaterialTextView(this);
+        view.setText(text);
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26);
+        view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        view.setTextColor(MaterialColors.getColor(view,
+                com.google.android.material.R.attr.colorOnSurface));
+        return view;
+    }
+
+    private MaterialTextView sectionTitle(String text) {
+        MaterialTextView view = heading(text);
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        return view;
+    }
+
+    private MaterialTextView bodyText(String text) {
+        MaterialTextView view = new MaterialTextView(this);
+        view.setText(text);
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        view.setLineSpacing(dp(3), 1f);
+        view.setTextColor(MaterialColors.getColor(view,
+                com.google.android.material.R.attr.colorOnSurfaceVariant));
+        return view;
+    }
+
+    private MaterialTextView statusText() {
+        MaterialTextView view = new MaterialTextView(this);
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        view.setMaxLines(2);
+        view.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+        view.setTextColor(MaterialColors.getColor(view,
+                com.google.android.material.R.attr.colorOnSurfaceVariant));
+        return view;
+    }
+
+    private MaterialButton outlinedButton(String text) {
+        MaterialButton button = new MaterialButton(this, null,
+                com.google.android.material.R.attr.materialButtonOutlinedStyle);
+        button.setText(text);
+        button.setTextAllCaps(false);
+        return button;
+    }
+
+    private MaterialButton textButton(String text) {
+        MaterialButton button = new MaterialButton(this, null,
+                com.google.android.material.R.attr.materialButtonTextStyle);
+        button.setText(text);
+        button.setTextAllCaps(false);
+        return button;
+    }
+
+    private LinearLayout.LayoutParams topMargin(int margin) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.topMargin = margin;
+        return params;
     }
 
     private void openFolderPicker() {
@@ -202,7 +282,11 @@ public class MainActivity extends Activity {
     private void openIsoPicker() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
+        // Android does not expose a universal ISO MIME type. Let every document
+        // provider list the file, then enforce the .iso extension after selection.
         intent.setType("*/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         try {
             startActivityForResult(intent, REQUEST_PICK_ISO);
         } catch (Exception e) {
@@ -237,7 +321,7 @@ public class MainActivity extends Activity {
             dirs[i + 1] = drivers.get(i).getAbsolutePath();
             sos[i + 1] = findDriverSo(drivers.get(i));
         }
-        new AlertDialog.Builder(this)
+        new MaterialAlertDialogBuilder(this)
                 .setTitle("Selecionar driver Vulkan")
                 .setItems(labels, (dialog, which) -> {
                     if (which == 0) {
@@ -285,20 +369,39 @@ public class MainActivity extends Activity {
             return;
         }
 
-        String path = uriToPath(data.getData());
+        Uri selectedUri = data.getData();
+        if (requestCode == REQUEST_PICK_ISO) {
+            String displayName = getDisplayName(getContentResolver(), selectedUri);
+            if (!isIsoFile(displayName)) {
+                Toast.makeText(this, "Selecione um arquivo com extensão .iso.",
+                        Toast.LENGTH_LONG).show();
+                return;
+            }
+            try {
+                getContentResolver().takePersistableUriPermission(selectedUri,
+                        data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION));
+            } catch (SecurityException e) {
+                // Some document providers do not offer persistable grants. The
+                // URI is still usable for the active process and its name is saved.
+                Log.w(TAG, "Persistable ISO permission unavailable", e);
+            }
+            isoPath = selectedUri.toString();
+            prefs.edit().putString(KEY_ISO, isoPath).apply();
+            refreshSelectionDisplay();
+            Toast.makeText(this, "ISO selecionada: " + displayName, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        String path = uriToPath(selectedUri);
         if (path == null) {
-            Toast.makeText(this, "Não foi possível obter o caminho do armazenamento.",
+            Toast.makeText(this, "Não foi possível obter o caminho da pasta selecionada.",
                     Toast.LENGTH_LONG).show();
             return;
         }
         if (requestCode == REQUEST_PICK_FOLDER) {
             gameDirPath = path;
-            isoPath = null;
-            prefs.edit().putString(KEY_GAME_DIR, path).remove(KEY_ISO).apply();
-        } else if (requestCode == REQUEST_PICK_ISO) {
-            isoPath = path;
-            gameDirPath = null;
-            prefs.edit().putString(KEY_ISO, path).remove(KEY_GAME_DIR).apply();
+            prefs.edit().putString(KEY_GAME_DIR, path).apply();
         }
         refreshSelectionDisplay();
     }
@@ -453,16 +556,33 @@ public class MainActivity extends Activity {
 
     private void refreshSelectionDisplay() {
         gameDirText.setText(gameDirPath != null
-                ? "Pasta: " + gameDirPath
-                : "Pasta: (nenhuma selecionada)");
+                ? "Pasta selecionada: " + gameDirPath
+                : "Nenhuma pasta selecionada");
         isoText.setText(isoPath != null
-                ? "ISO: " + isoPath
-                : "ISO: (nenhum selecionado)");
+                ? "ISO selecionada: " + getIsoDisplayName(isoPath)
+                : "Nenhuma ISO selecionada");
         if (driverDir != null && driverSo != null && new File(driverDir).isDirectory()) {
             driverText.setText("Driver: " + driverSo + " (" + driverDir + ")");
         } else {
             driverText.setText("Driver: do sistema (padrão)");
         }
+    }
+
+    private static boolean isIsoFile(String displayName) {
+        return displayName != null && displayName.toLowerCase().endsWith(".iso");
+    }
+
+    private String getIsoDisplayName(String storedUri) {
+        try {
+            Uri uri = Uri.parse(storedUri);
+            String displayName = getDisplayName(getContentResolver(), uri);
+            if (displayName != null && !displayName.isEmpty()) {
+                return displayName;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Could not resolve ISO display name", e);
+        }
+        return new File(storedUri).getName();
     }
 
     /** Best-effort mapping of a SAF content URI back to a real filesystem path. */
@@ -513,12 +633,16 @@ public class MainActivity extends Activity {
     private void startGame() {
         String gameDataRoot = resolveGameDataRoot();
         if (gameDataRoot == null) {
-            new AlertDialog.Builder(this)
-                    .setTitle("Jogo não encontrado")
-                    .setMessage("Selecione a pasta com o conteúdo extraído de "
-                            + "'Destroy All Humans! Path of the Furon (USA)' (default.xex + "
-                            + "KronosGame), ou um ISO extraído para uma pasta.")
-                    .setPositiveButton("OK", null)
+            String message = "Selecione a pasta com o conteúdo extraído de "
+                    + "'Destroy All Humans! Path of the Furon (USA)' (default.xex + KronosGame).";
+            if (isoPath != null) {
+                message += "\n\nA ISO foi selecionada, mas o motor requer os dados extraídos "
+                        + "em uma pasta antes de iniciar.";
+            }
+            new MaterialAlertDialogBuilder(this)
+                    .setTitle("Dados do jogo não encontrados")
+                    .setMessage(message)
+                    .setPositiveButton("Entendi", null)
                     .show();
             return;
         }
@@ -535,12 +659,6 @@ public class MainActivity extends Activity {
     }
 
     private String resolveGameDataRoot() {
-        if (isoPath != null) {
-            File derived = isoDerivedFolder(isoPath);
-            if (derived != null && looksLikeGameData(derived)) {
-                return derived.getAbsolutePath();
-            }
-        }
         if (gameDirPath != null && looksLikeGameData(new File(gameDirPath))) {
             return gameDirPath;
         }
@@ -560,14 +678,6 @@ public class MainActivity extends Activity {
             if (looksLikeGameData(new File(candidate))) {
                 return candidate;
             }
-        }
-        return null;
-    }
-
-    private static File isoDerivedFolder(String iso) {
-        int dot = iso.lastIndexOf('.');
-        if (dot > 0) {
-            return new File(iso.substring(0, dot));
         }
         return null;
     }
