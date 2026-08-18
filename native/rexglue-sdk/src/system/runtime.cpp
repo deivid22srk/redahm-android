@@ -33,6 +33,7 @@ REXCVAR_DEFINE_STRING(user_data_root, "", "Runtime", "Override user data path");
 REXCVAR_DEFINE_STRING(update_data_root, "", "Runtime", "Override update data path");
 REXCVAR_DEFINE_STRING(cache_root, "", "Runtime", "Override shader cache path");
 REXCVAR_DEFINE_STRING(metadata_root, "", "Runtime", "Override metadata path");
+REXCVAR_DECLARE(std::string, perf_log_csv);
 
 namespace rex {
 
@@ -103,6 +104,14 @@ X_STATUS Runtime::Setup(RuntimeConfig config) {
 
   // Start profiler (Tracy network threads, counter init)
   rex::perf::Profiler::Startup();
+
+#ifdef REXGLUE_ENABLE_PERF_COUNTERS
+  // Wire the per-frame CSV log cvar (set perf_log_csv=/path/file.csv).
+  const std::string& csv_path = REXCVAR_GET(perf_log_csv);
+  if (!csv_path.empty()) {
+    rex::perf::SetCsvLogPath(csv_path);
+  }
+#endif
 
   // Initialize SEH exception support for hardware exception handling
   rex::initialize_seh();

@@ -280,7 +280,52 @@ void CommandProcessor::WorkerThreadMain() {
   }
   REXSYS_INFO("GPU Commands worker thread SetupContext finished");
 
+  #ifdef REXGLUE_ENABLE_PERF_COUNTERS
+  uint64_t perf_last_log_tick = rex::chrono::Clock::QueryHostTickCount();
+  uint64_t perf_exec_ticks = 0;
+  uint64_t perf_stall_ticks = 0;
+  const uint64_t perf_freq = rex::chrono::Clock::QueryHostTickFrequency();
+  auto LogPerfStats = [&]() {
+    uint64_t perf_now = rex::chrono::Clock::QueryHostTickCount();
+    if (perf_now - perf_last_log_tick < perf_freq * 5) {
+      return;
+    }
+    double wall_s = static_cast<double>(perf_now - perf_last_log_tick) / static_cast<double>(perf_freq);
+    double busy = (perf_exec_ticks + perf_stall_ticks)
+                      ? static_cast<double>(perf_exec_ticks) /
+                            static_cast<double>(perf_exec_ticks + perf_stall_ticks)
+                      : 0.0;
+    REXGPU_INFO(
+        "PERF wall={:.1f}s exec_busy={:.0f}% fps={} frame_time_us={} draws={} verts={} "
+        "cmd_stalls={} bufq={} funcs={} ints={} threads={} apc={} crit={} tex_hit={} "
+        "tex_miss={} pipe_hit={} pipe_miss={}",
+        wall_s, busy * 100.0,
+        static_cast<int64_t>(rex::perf::GetCounter(rex::perf::CounterId::kFps)),
+        static_cast<int64_t>(rex::perf::GetSnapshotCounter(rex::perf::CounterId::kFrameTimeUs)),
+        static_cast<int64_t>(rex::perf::GetSnapshotCounter(rex::perf::CounterId::kDrawCalls)),
+        static_cast<int64_t>(rex::perf::GetSnapshotCounter(rex::perf::CounterId::kVerticesProcessed)),
+        static_cast<int64_t>(rex::perf::GetSnapshotCounter(rex::perf::CounterId::kCommandBufferStalls)),
+        static_cast<int64_t>(rex::perf::GetSnapshotCounter(rex::perf::CounterId::kBufferQueueDepth)),
+        static_cast<int64_t>(rex::perf::GetSnapshotCounter(rex::perf::CounterId::kFunctionsDispatched)),
+        static_cast<int64_t>(rex::perf::GetSnapshotCounter(rex::perf::CounterId::kInterruptDispatches)),
+        static_cast<int64_t>(rex::perf::GetCounter(rex::perf::CounterId::kActiveThreads)),
+        static_cast<int64_t>(rex::perf::GetSnapshotCounter(rex::perf::CounterId::kApcQueueDepth)),
+        static_cast<int64_t>(rex::perf::GetCounter(rex::perf::CounterId::kCriticalRegionContentions)),
+        static_cast<int64_t>(rex::perf::GetSnapshotCounter(rex::perf::CounterId::kTextureCacheHits)),
+        static_cast<int64_t>(rex::perf::GetSnapshotCounter(rex::perf::CounterId::kTextureCacheMisses)),
+        static_cast<int64_t>(rex::perf::GetSnapshotCounter(rex::perf::CounterId::kPipelineCacheHits)),
+        static_cast<int64_t>(rex::perf::GetSnapshotCounter(rex::perf::CounterId::kPipelineCacheMisses)));
+    perf_last_log_tick = perf_now;
+    perf_exec_ticks = 0;
+    perf_stall_ticks = 0;
+  };
+#endif
+
   while (worker_running_) {
+#ifdef REXGLUE_ENABLE_PERF_COUNTERS
+    LogPerfStats();
+#endif
+
     while (!pending_fns_.empty()) {
       auto fn = std::move(pending_fns_.front());
       pending_fns_.pop();
@@ -293,6 +338,7 @@ void CommandProcessor::WorkerThreadMain() {
       // We've run out of commands to execute.
       // We spin here waiting for new ones, as the overhead of waiting on our
       // event is too high.
+      uint64_t stall_start = rex::chrono::Clock::QueryHostTickCount();
       PrepareForWait();
       uint32_t loop_count = 0;
       do {
@@ -308,7 +354,11 @@ void CommandProcessor::WorkerThreadMain() {
         write_ptr_index = write_ptr_index_.load();
       } while (worker_running_ && pending_fns_.empty() &&
                (write_ptr_index == 0xBAADF00D || read_ptr_index_ == write_ptr_index));
+      uint64_t stall_end = rex::chrono::Clock::QueryHostTickCount();
       ReturnFromWait();
+#ifdef REXGLUE_ENABLE_PERF_COUNTERS
+      perf_stall_ticks += stall_end - stall_start;
+#endif
       if (!worker_running_ || !pending_fns_.empty()) {
         continue;
       }
@@ -316,7 +366,13 @@ void CommandProcessor::WorkerThreadMain() {
     assert_true(read_ptr_index_ != write_ptr_index);
 
     // Execute. Note that we handle wraparound transparently.
+    uint64_t exec_start = rex::chrono::Clock::QueryHostTickCount();
     read_ptr_index_ = ExecutePrimaryBuffer(read_ptr_index_, write_ptr_index);
+    uint64_t exec_end = rex::chrono::Clock::QueryHostTickCount();
+#ifdef REXGLUE_ENABLE_PERF_COUNTERS
+    perf_exec_ticks += exec_end - exec_start;
+    LogPerfStats();
+#endif
 
     // TODO(benvanik): use reader->Read_update_freq_ and only issue after moving
     //     that many indices.

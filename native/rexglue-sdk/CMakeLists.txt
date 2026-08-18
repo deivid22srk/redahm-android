@@ -18,12 +18,14 @@ option(REXGLUE_ENABLE_SANITIZERS "Enable UndefinedBehaviorSanitizer" OFF)
 option(REXGLUE_ENABLE_FIDELITYFX "Enable optional AMD FidelityFX integration (experimental)" OFF)
 option(REXGLUE_ENABLE_TRACY                "Enable Tracy profiler integration" ON)
 option(REXGLUE_ENABLE_PERF_COUNTERS        "Enable lightweight perf counter registry and overlay" ON)
-# Propagate profiling defines globally (compiled out in Release)
+# Propagate profiling defines globally (Tracy compiled out in Release)
 if(REXGLUE_ENABLE_TRACY)
     add_compile_definitions($<$<NOT:$<CONFIG:Release>>:REXGLUE_ENABLE_PROFILING>)
 endif()
+# Perf counters are lightweight (atomic increments) - keep them in Release
+# builds for FPS/frame diagnostics.
 if(REXGLUE_ENABLE_PERF_COUNTERS)
-    add_compile_definitions($<$<NOT:$<CONFIG:Release>>:REXGLUE_ENABLE_PERF_COUNTERS>)
+    add_compile_definitions(REXGLUE_ENABLE_PERF_COUNTERS)
 endif()
 
 # Graphics backend selection
