@@ -9,6 +9,9 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -21,10 +24,59 @@
 #include <rex/ui/vulkan/instance.h>
 #include <rex/ui/vulkan/presenter.h>
 #if REX_PLATFORM_ANDROID
+#include <sys/system_properties.h>
 #include <rex/main_android.h>
 #endif
 
 REXCVAR_DEFINE_BOOL(vulkan_log_debug_messages, true, "UI/Vulkan", "Log Vulkan debug messages");
+
+#if REX_PLATFORM_ANDROID
+// Turnip (Mesa freedreno) quirks are keyed off the GPU generation and the
+// vendor OS, both of which have to be known before the driver library loads.
+namespace {
+
+REXCVAR_DEFINE_STRING(
+    turnip_debug, "sysmem", "UI/Vulkan",
+    "TU_DEBUG flags passed to the Turnip (Mesa freedreno) Vulkan driver, "
+    "comma-separated. 'sysmem' forces sysmem (untiled) rendering, which masks "
+    "a class of tiled-rendering (GMEM) artifacts and Adreno GPU hangs - but "
+    "only on Turnip; proprietary drivers ignore it. Empty leaves TU_DEBUG "
+    "unset.");
+
+REXCVAR_DEFINE_STRING(
+    fd_dev_features, "", "UI/Vulkan",
+    "FD_DEV_FEATURES overrides for the Turnip driver. Empty auto-detects the "
+    "vendor OSes whose framebuffer stack needs enable_tp_ubwc_flag_hint=1 "
+    "(Samsung One UI, Xiaomi HyperOS/MIUI); set 'none' to inject nothing.");
+
+// Adreno generation (6 for a6xx), 0 when the KGSL model node is unreadable.
+int AdrenoGeneration() {
+  char gpu_model[64] = {};
+  if (FILE* f = fopen("/sys/class/kgsl/kgsl-3d0/gpu_model", "r")) {
+    if (!fgets(gpu_model, sizeof(gpu_model), f)) {
+      gpu_model[0] = '\0';
+    }
+    fclose(f);
+  }
+  const char* model_digits = strpbrk(gpu_model, "0123456789");
+  return model_digits ? atoi(model_digits) / 100 : 0;
+}
+
+bool SystemPropertySet(const char* name) {
+  char value[PROP_VALUE_MAX] = {};
+  return __system_property_get(name, value) > 0 && value[0] != '\0';
+}
+
+// Keyed on each skin's own version property, not the manufacturer: a Samsung
+// or Xiaomi device running stock or custom Android does not need the hint.
+bool IsVendorOsNeedingUbwcFlagHint() {
+  return SystemPropertySet("ro.build.version.oneui") ||
+         SystemPropertySet("ro.mi.os.version.name") ||
+         SystemPropertySet("ro.miui.ui.version.name");
+}
+
+}  // namespace
+#endif
 
 namespace rex {
 namespace ui {
@@ -33,6 +85,32 @@ namespace vulkan {
 std::unique_ptr<VulkanInstance> VulkanInstance::Create(const bool with_surface,
                                                        const bool try_enable_validation) {
   std::unique_ptr<VulkanInstance> vulkan_instance(new VulkanInstance());
+
+#if REX_PLATFORM_ANDROID
+  // Turnip reads these env vars when vkCreateInstance is called, so set them
+  // before any Vulkan entry point is invoked (stock drivers ignore them).
+  std::string tu_debug = REXCVAR_GET(turnip_debug);
+  // Adreno 6xx: Turnip's shared-consts push delivery is broken there.
+  if (tu_debug.find("push_consts_per_stage") == std::string::npos &&
+      AdrenoGeneration() == 6) {
+    tu_debug += tu_debug.empty() ? "push_consts_per_stage"
+                                 : ",push_consts_per_stage";
+  }
+  if (!tu_debug.empty()) {
+    setenv("TU_DEBUG", tu_debug.c_str(), 1);
+    REXLOG_INFO("Set TU_DEBUG={} for the Turnip Vulkan driver", tu_debug);
+  }
+  // One UI and HyperOS/MIUI: their framebuffer stack needs the UBWC flag hint
+  // for Turnip to sample rendered images correctly.
+  std::string fd_features = REXCVAR_GET(fd_dev_features);
+  if (fd_features.empty() && IsVendorOsNeedingUbwcFlagHint()) {
+    fd_features = "enable_tp_ubwc_flag_hint=1";
+  }
+  if (!fd_features.empty() && fd_features != "none") {
+    setenv("FD_DEV_FEATURES", fd_features.c_str(), 1);
+    REXLOG_INFO("Set FD_DEV_FEATURES={} for the Turnip Vulkan driver", fd_features);
+  }
+#endif
 
   // Load the RenderDoc API if connected.
 
