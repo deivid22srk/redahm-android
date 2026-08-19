@@ -1,11 +1,13 @@
 package io.redahm.android;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -15,20 +17,14 @@ import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
-
-import com.google.android.material.button.MaterialButton;
-import com.google.android.material.card.MaterialCardView;
-import com.google.android.material.color.MaterialColors;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.google.android.material.divider.MaterialDivider;
-import com.google.android.material.textview.MaterialTextView;
-import com.google.android.material.appbar.MaterialToolbar;
 
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -54,12 +50,17 @@ public class MainActivity extends Activity {
     public static final String EXTRA_USER_DATA_ROOT = "io.redahm.android.USER_DATA_ROOT";
     public static final String EXTRA_VULKAN_DRIVER_DIR = "io.redahm.android.VULKAN_DRIVER_DIR";
     public static final String EXTRA_VULKAN_DRIVER_SO = "io.redahm.android.VULKAN_DRIVER_SO";
+    public static final String EXTRA_GRAPHICS_PROFILE = "io.redahm.android.GRAPHICS_PROFILE";
 
     private static final String PREFS = "redahm_launcher";
     private static final String KEY_GAME_DIR = "game_dir";
     private static final String KEY_ISO = "iso_path";
     private static final String KEY_DRIVER_DIR = "vulkan_driver_dir";
     private static final String KEY_DRIVER_SO = "vulkan_driver_so";
+    private static final String KEY_GRAPHICS_PROFILE = "graphics_profile";
+
+    private static final int GRAPHICS_PROFILE_PERFORMANCE = 0;
+    private static final int GRAPHICS_PROFILE_QUALITY = 1;
 
     private static final int REQUEST_PICK_FOLDER = 1;
     private static final int REQUEST_PICK_ISO = 2;
@@ -75,10 +76,14 @@ public class MainActivity extends Activity {
     private String isoPath;
     private String driverDir;
     private String driverSo;
+    private int graphicsProfile;
 
     private TextView gameDirText;
     private TextView isoText;
     private TextView driverText;
+    private TextView graphicsProfileText;
+    private Button graphicsDownButton;
+    private Button graphicsUpButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -93,96 +98,95 @@ public class MainActivity extends Activity {
         isoPath = prefs.getString(KEY_ISO, null);
         driverDir = prefs.getString(KEY_DRIVER_DIR, null);
         driverSo = prefs.getString(KEY_DRIVER_SO, null);
+        graphicsProfile = Math.max(GRAPHICS_PROFILE_PERFORMANCE, Math.min(GRAPHICS_PROFILE_QUALITY,
+                prefs.getInt(KEY_GRAPHICS_PROFILE, GRAPHICS_PROFILE_PERFORMANCE)));
 
         setContentView(buildLayout());
         refreshSelectionDisplay();
     }
 
     private View buildLayout() {
-        int spacing16 = dp(16);
-        int spacing24 = dp(24);
-
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
-        page.setBackgroundColor(MaterialColors.getColor(page,
-                com.google.android.material.R.attr.colorSurface));
+        page.setPadding(dp(18), dp(22), dp(18), dp(20));
+        page.setBackground(gradient(0xFF020B10, 0xFF061C27, 0xFF02080E, GradientDrawable.Orientation.TL_BR, 0));
 
-        MaterialToolbar toolbar = new MaterialToolbar(this);
-        toolbar.setTitle("ReDAHM");
-        toolbar.setSubtitle("Launcher do jogo");
-        toolbar.setTitleCentered(false);
-        page.addView(toolbar, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        TextView logo = label("DESTROY ALL\nHUMANS!", 30, 0xFFFFB000, Typeface.BOLD);
+        logo.setLineSpacing(0, 0.86f);
+        page.addView(logo);
+        TextView gameName = label("PATH OF THE FURON", 18, 0xFFA35CFF, Typeface.BOLD);
+        gameName.setLetterSpacing(0.08f);
+        page.addView(gameName, topMargin(dp(2)));
+        TextView version = label("ReDAHM  •  ANDROID LAUNCHER", 11, 0xFF65D8FF, Typeface.BOLD);
+        version.setLetterSpacing(0.12f);
+        page.addView(version, topMargin(dp(10)));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setClipToPadding(false);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(spacing16, spacing24, spacing16, spacing24);
+        content.setPadding(0, dp(18), 0, dp(4));
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        MaterialTextView title = heading("Prepare sua sessão");
-        content.addView(title);
-
-        MaterialTextView subtitle = bodyText(
-                "Selecione os dados extraídos do seu jogo ou escolha um arquivo ISO. "
-                        + "Os dados extraídos precisam conter default.xex e a pasta KronosGame.");
-        subtitle.setPadding(0, dp(6), 0, spacing16);
-        content.addView(subtitle);
-
-        MaterialCardView gameCard = sectionCard();
-        LinearLayout gameContent = cardContent(gameCard);
-        gameContent.addView(sectionTitle("Dados do jogo"));
-        gameContent.addView(bodyText("Escolha uma pasta já extraída, pronta para iniciar."));
-        MaterialButton pickDir = outlinedButton("Selecionar pasta do jogo");
+        content.addView(sectionLabel("SESSÃO DE JOGO"));
+        LinearLayout gamePanel = panel();
+        gamePanel.addView(sectionTitle("Dados extraídos"));
+        gamePanel.addView(bodyText("Selecione a pasta com default.xex e KronosGame."), topMargin(dp(5)));
+        Button pickDir = neonButton("SELECIONAR PASTA", false);
         pickDir.setOnClickListener(v -> openFolderPicker());
-        gameContent.addView(pickDir, topMargin(dp(16)));
+        gamePanel.addView(pickDir, topMargin(dp(14)));
         gameDirText = statusText();
-        gameContent.addView(gameDirText, topMargin(dp(12)));
-        content.addView(gameCard, topMargin(dp(8)));
+        gamePanel.addView(gameDirText, topMargin(dp(10)));
+        content.addView(gamePanel, topMargin(dp(8)));
 
-        MaterialCardView isoCard = sectionCard();
-        LinearLayout isoContent = cardContent(isoCard);
-        isoContent.addView(sectionTitle("Imagem ISO"));
-        isoContent.addView(bodyText("O seletor exibirá arquivos .iso. A ISO escolhida é salva para "
-                + "referência; o jogo ainda precisa estar extraído em uma pasta para ser iniciado."));
-        MaterialButton pickIso = outlinedButton("Selecionar arquivo ISO");
+        LinearLayout isoPanel = panel();
+        isoPanel.addView(sectionTitle("Imagem ISO"));
+        isoPanel.addView(bodyText("Guarde a ISO selecionada como referência; para iniciar, o jogo deve estar extraído."), topMargin(dp(5)));
+        Button pickIso = neonButton("SELECIONAR ISO", false);
         pickIso.setOnClickListener(v -> openIsoPicker());
-        isoContent.addView(pickIso, topMargin(dp(16)));
+        isoPanel.addView(pickIso, topMargin(dp(14)));
         isoText = statusText();
-        isoContent.addView(isoText, topMargin(dp(12)));
-        content.addView(isoCard, topMargin(dp(16)));
+        isoPanel.addView(isoText, topMargin(dp(10)));
+        content.addView(isoPanel, topMargin(dp(12)));
 
-        MaterialButton start = new MaterialButton(this, null,
-                com.google.android.material.R.attr.materialButtonStyle);
-        start.setText("Iniciar jogo");
-        start.setAllCaps(false);
-        start.setOnClickListener(v -> startGame());
-        content.addView(start, topMargin(dp(24)));
+        content.addView(sectionLabel("GRÁFICOS"), topMargin(dp(22)));
+        LinearLayout graphicsPanel = panel();
+        graphicsPanel.addView(sectionTitle("Qualidade visual"));
+        graphicsPanel.addView(bodyText("Ajuste real do desfoque de movimento. Menor qualidade reduz pós-processamento; maior qualidade o preserva."), topMargin(dp(5)));
+        LinearLayout graphicsControls = new LinearLayout(this);
+        graphicsControls.setGravity(Gravity.CENTER_VERTICAL);
+        graphicsControls.setPadding(0, dp(12), 0, 0);
+        graphicsDownButton = compactButton("−");
+        graphicsDownButton.setOnClickListener(v -> changeGraphicsProfile(-1));
+        graphicsControls.addView(graphicsDownButton, squareParams());
+        graphicsProfileText = label("", 16, 0xFFEAFBFF, Typeface.BOLD);
+        graphicsProfileText.setGravity(Gravity.CENTER);
+        graphicsControls.addView(graphicsProfileText, weightedParams());
+        graphicsUpButton = compactButton("+");
+        graphicsUpButton.setOnClickListener(v -> changeGraphicsProfile(1));
+        graphicsControls.addView(graphicsUpButton, squareParams());
+        graphicsPanel.addView(graphicsControls);
+        content.addView(graphicsPanel, topMargin(dp(8)));
 
-        MaterialDivider divider = new MaterialDivider(this);
-        content.addView(divider, topMargin(dp(28)));
-
-        MaterialTextView driverTitle = heading("Driver Vulkan");
-        driverTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
-        content.addView(driverTitle, topMargin(dp(24)));
-        content.addView(bodyText("Opcional: importe um driver Vulkan personalizado para GPUs Adreno. "
-                + "São aceitos pacotes .zip (AdrenoTools) e bibliotecas .so. Use somente fontes confiáveis."));
-
-        MaterialCardView driverCard = sectionCard();
-        LinearLayout driverContent = cardContent(driverCard);
-        MaterialButton importDriver = outlinedButton("Importar driver Vulkan");
+        content.addView(sectionLabel("DRIVER VULKAN"), topMargin(dp(22)));
+        LinearLayout driverPanel = panel();
+        driverPanel.addView(bodyText("Importe um driver personalizado para GPUs Adreno: pacotes .zip (AdrenoTools) ou bibliotecas .so."));
+        Button importDriver = neonButton("IMPORTAR DRIVER", false);
         importDriver.setOnClickListener(v -> openDriverPicker());
-        driverContent.addView(importDriver);
+        driverPanel.addView(importDriver, topMargin(dp(14)));
         driverText = statusText();
-        driverContent.addView(driverText, topMargin(dp(12)));
-        MaterialButton chooseDriver = textButton("Trocar driver");
+        driverPanel.addView(driverText, topMargin(dp(10)));
+        Button chooseDriver = neonButton("TROCAR DRIVER", false);
         chooseDriver.setOnClickListener(v -> openDriverChooser());
-        driverContent.addView(chooseDriver, topMargin(dp(8)));
-        content.addView(driverCard, topMargin(dp(12)));
+        driverPanel.addView(chooseDriver, topMargin(dp(10)));
+        content.addView(driverPanel, topMargin(dp(8)));
 
+        Button start = neonButton("INICIAR JOGO", true);
+        start.setOnClickListener(v -> startGame());
+        content.addView(start, topMargin(dp(22)));
+        refreshGraphicsProfileDisplay();
         return page;
     }
 
@@ -190,75 +194,84 @@ public class MainActivity extends Activity {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
-    private MaterialCardView sectionCard() {
-        MaterialCardView card = new MaterialCardView(this);
-        card.setCardElevation(0f);
-        card.setStrokeWidth(dp(1));
-        card.setStrokeColor(MaterialColors.getColor(card,
-                com.google.android.material.R.attr.colorOutlineVariant));
-        card.setCardBackgroundColor(MaterialColors.getColor(card,
-                com.google.android.material.R.attr.colorSurfaceContainerLow));
-        card.setRadius(dp(20));
-        return card;
+    private GradientDrawable gradient(int startColor, int centerColor, int endColor,
+                                      GradientDrawable.Orientation orientation, int radius) {
+        GradientDrawable drawable = new GradientDrawable(orientation, new int[]{startColor, centerColor, endColor});
+        drawable.setCornerRadius(dp(radius));
+        return drawable;
     }
 
-    private LinearLayout cardContent(MaterialCardView card) {
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(20), dp(20), dp(20), dp(20));
-        card.addView(content);
-        return content;
+    private LinearLayout panel() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(16), dp(15), dp(16), dp(15));
+        GradientDrawable background = gradient(0xE60A2633, 0xE6091827, 0xE602101A,
+                GradientDrawable.Orientation.LEFT_RIGHT, 10);
+        background.setStroke(dp(1), 0xFF168CA8);
+        panel.setBackground(background);
+        return panel;
     }
 
-    private MaterialTextView heading(String text) {
-        MaterialTextView view = new MaterialTextView(this);
+    private TextView label(String text, int size, int color, int style) {
+        TextView view = new TextView(this);
         view.setText(text);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26);
-        view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        view.setTextColor(MaterialColors.getColor(view,
-                com.google.android.material.R.attr.colorOnSurface));
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, size);
+        view.setTextColor(color);
+        view.setTypeface(Typeface.create("sans-serif-condensed", style));
         return view;
     }
 
-    private MaterialTextView sectionTitle(String text) {
-        MaterialTextView view = heading(text);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+    private TextView sectionLabel(String text) {
+        TextView view = label(text, 11, 0xFF45DFFF, Typeface.BOLD);
+        view.setLetterSpacing(0.16f);
         return view;
     }
 
-    private MaterialTextView bodyText(String text) {
-        MaterialTextView view = new MaterialTextView(this);
-        view.setText(text);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+    private TextView sectionTitle(String text) {
+        return label(text, 19, 0xFFF4FCFF, Typeface.BOLD);
+    }
+
+    private TextView bodyText(String text) {
+        TextView view = label(text, 14, 0xFFABCCD8, Typeface.NORMAL);
         view.setLineSpacing(dp(3), 1f);
-        view.setTextColor(MaterialColors.getColor(view,
-                com.google.android.material.R.attr.colorOnSurfaceVariant));
         return view;
     }
 
-    private MaterialTextView statusText() {
-        MaterialTextView view = new MaterialTextView(this);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+    private TextView statusText() {
+        TextView view = label("", 12, 0xFF66E3FF, Typeface.NORMAL);
         view.setMaxLines(2);
         view.setEllipsize(TextUtils.TruncateAt.MIDDLE);
-        view.setTextColor(MaterialColors.getColor(view,
-                com.google.android.material.R.attr.colorOnSurfaceVariant));
         return view;
     }
 
-    private MaterialButton outlinedButton(String text) {
-        MaterialButton button = new MaterialButton(this, null,
-                com.google.android.material.R.attr.materialButtonOutlinedStyle);
+    private Button neonButton(String text, boolean primary) {
+        Button button = new Button(this);
         button.setText(text);
+        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        button.setTextColor(primary ? 0xFFFFFFFF : 0xFF58E9FF);
+        button.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD));
+        button.setLetterSpacing(0.08f);
         button.setAllCaps(false);
+        GradientDrawable background = gradient(primary ? 0xFF6B25B8 : 0xFF0B3748,
+                primary ? 0xFF382393 : 0xFF071925,
+                primary ? 0xFF0B4D70 : 0xFF020E16,
+                GradientDrawable.Orientation.LEFT_RIGHT, 8);
+        background.setStroke(dp(1), primary ? 0xFFB95CFF : 0xFF19DFF2);
+        button.setBackground(background);
+        button.setMinHeight(dp(46));
         return button;
     }
 
-    private MaterialButton textButton(String text) {
-        MaterialButton button = new MaterialButton(this, null,
-                com.google.android.material.R.attr.borderlessButtonStyle);
+    private Button compactButton(String text) {
+        Button button = new Button(this);
         button.setText(text);
+        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 25);
+        button.setTextColor(0xFFFFFFFF);
         button.setAllCaps(false);
+        GradientDrawable background = gradient(0xFF203A52, 0xFF102033, 0xFF071019,
+                GradientDrawable.Orientation.TL_BR, 8);
+        background.setStroke(dp(1), 0xFF36DDF6);
+        button.setBackground(background);
         return button;
     }
 
@@ -267,6 +280,46 @@ public class MainActivity extends Activity {
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         params.topMargin = margin;
         return params;
+    }
+
+    private LinearLayout.LayoutParams squareParams() {
+        return new LinearLayout.LayoutParams(dp(50), dp(46));
+    }
+
+    private LinearLayout.LayoutParams weightedParams() {
+        return new LinearLayout.LayoutParams(0, dp(46), 1f);
+    }
+
+    private void changeGraphicsProfile(int direction) {
+        int newProfile = Math.max(GRAPHICS_PROFILE_PERFORMANCE,
+                Math.min(GRAPHICS_PROFILE_QUALITY, graphicsProfile + direction));
+        if (newProfile == graphicsProfile) {
+            return;
+        }
+        graphicsProfile = newProfile;
+        prefs.edit().putInt(KEY_GRAPHICS_PROFILE, graphicsProfile).apply();
+        refreshGraphicsProfileDisplay();
+    }
+
+    private void refreshGraphicsProfileDisplay() {
+        if (graphicsProfileText == null) {
+            return;
+        }
+        String profile;
+        String effect;
+        if (graphicsProfile == GRAPHICS_PROFILE_QUALITY) {
+            profile = "QUALIDADE";
+            effect = "desfoque de movimento ligado";
+        } else {
+            profile = "DESEMPENHO";
+            effect = "desfoque de movimento desligado";
+        }
+        graphicsProfileText.setText(profile + "\n" + effect);
+        graphicsProfileText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        graphicsDownButton.setEnabled(graphicsProfile > GRAPHICS_PROFILE_PERFORMANCE);
+        graphicsUpButton.setEnabled(graphicsProfile < GRAPHICS_PROFILE_QUALITY);
+        graphicsDownButton.setAlpha(graphicsDownButton.isEnabled() ? 1f : 0.35f);
+        graphicsUpButton.setAlpha(graphicsUpButton.isEnabled() ? 1f : 0.35f);
     }
 
     private void openFolderPicker() {
@@ -321,7 +374,7 @@ public class MainActivity extends Activity {
             dirs[i + 1] = drivers.get(i).getAbsolutePath();
             sos[i + 1] = findDriverSo(drivers.get(i));
         }
-        new MaterialAlertDialogBuilder(this)
+        new AlertDialog.Builder(this)
                 .setTitle("Selecionar driver Vulkan")
                 .setItems(labels, (dialog, which) -> {
                     if (which == 0) {
@@ -639,7 +692,7 @@ public class MainActivity extends Activity {
                 message += "\n\nA ISO foi selecionada, mas o motor requer os dados extraídos "
                         + "em uma pasta antes de iniciar.";
             }
-            new MaterialAlertDialogBuilder(this)
+            new AlertDialog.Builder(this)
                     .setTitle("Dados do jogo não encontrados")
                     .setMessage(message)
                     .setPositiveButton("Entendi", null)
@@ -651,6 +704,7 @@ public class MainActivity extends Activity {
         Intent intent = new Intent(this, GameActivity.class);
         intent.putExtra(EXTRA_GAME_DATA_ROOT, gameDataRoot);
         intent.putExtra(EXTRA_USER_DATA_ROOT, userRoot.getAbsolutePath());
+        intent.putExtra(EXTRA_GRAPHICS_PROFILE, graphicsProfile);
         if (driverDir != null && driverSo != null && new File(driverDir).isDirectory()) {
             intent.putExtra(EXTRA_VULKAN_DRIVER_DIR, driverDir);
             intent.putExtra(EXTRA_VULKAN_DRIVER_SO, driverSo);

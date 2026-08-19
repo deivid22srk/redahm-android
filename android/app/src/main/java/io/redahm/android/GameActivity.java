@@ -2,7 +2,6 @@ package io.redahm.android;
 
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
-import android.content.res.AssetManager;
 import android.hardware.input.InputManager;
 import android.os.Bundle;
 import android.util.Log;
@@ -17,7 +16,6 @@ import org.libsdl.app.SDLControllerManager;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,6 +30,8 @@ import java.util.List;
 public class GameActivity extends SDLActivity implements InputManager.InputDeviceListener {
     private static final String TAG = "ReDAHM";
     private static final int VIRTUAL_JOYSTICK_ID = -31337;
+    private static final int GRAPHICS_PROFILE_PERFORMANCE = 0;
+    private static final int GRAPHICS_PROFILE_QUALITY = 1;
 
     private VirtualGamepadView virtualGamepad;
     private boolean virtualJoystickRegistered;
@@ -46,9 +46,12 @@ public class GameActivity extends SDLActivity implements InputManager.InputDevic
         // SDLActivity.loadLibraries() (which loads libSDL3.so and libmain.so),
         // and the SDL main thread only starts after onCreate returns.
         setupNativePaths();
-        installDefaultConfig();
 
         Intent intent = getIntent();
+        int graphicsProfile = intent == null
+                ? GRAPHICS_PROFILE_PERFORMANCE
+                : intent.getIntExtra(MainActivity.EXTRA_GRAPHICS_PROFILE, GRAPHICS_PROFILE_PERFORMANCE);
+        installGraphicsConfig(graphicsProfile);
         String driverDir = intent == null ? null : intent.getStringExtra(MainActivity.EXTRA_VULKAN_DRIVER_DIR);
         String driverSo = intent == null ? null : intent.getStringExtra(MainActivity.EXTRA_VULKAN_DRIVER_SO);
         if (driverDir != null && driverSo != null) {
@@ -63,54 +66,29 @@ public class GameActivity extends SDLActivity implements InputManager.InputDevic
     }
 
     /**
-     * Copies the bundled {@code assets/redahm.toml} performance profile to
-     * {@code <user_data_root>/redahm.toml} on first launch (or whenever the
-     * bundled profile is newer). The native runtime loads that file before
-     * starting the game, so the file must be in place before the SDL main
-     * thread runs (i.e. before onCreate returns).
+     * Writes the launcher-selected graphics profile before SDL starts. The
+     * native runtime loads this TOML from user_data_root during initialization.
      */
-    private void installDefaultConfig() {
-        final int bundledVersion = 2;
+    private void installGraphicsConfig(int graphicsProfile) {
+        boolean disableMotionBlur = graphicsProfile == GRAPHICS_PROFILE_PERFORMANCE;
         try {
             File userRoot = new File(getExternalFilesDir(null), "user");
-            File configFile = new File(userRoot, "redahm.toml");
-            if (configFile.exists() && installedConfigVersion(configFile) >= bundledVersion) {
-                return;
-            }
             if (!userRoot.exists() && !userRoot.mkdirs()) {
                 Log.w(TAG, "Unable to create user data dir: " + userRoot);
                 return;
             }
-            AssetManager assets = getAssets();
-            InputStream in = null;
-            OutputStream out = null;
-            try {
-                in = assets.open("redahm.toml");
-                out = new FileOutputStream(configFile);
-                byte[] buffer = new byte[16384];
-                int read;
-                while ((read = in.read(buffer)) != -1) {
-                    out.write(buffer, 0, read);
-                }
+            File configFile = new File(userRoot, "redahm.toml");
+            String config = "# ReDAHM launcher graphics profile\n"
+                    + "# This file is rewritten before each game launch.\n"
+                    + "disable_motion_blur = " + disableMotionBlur + "\n";
+            try (OutputStream out = new FileOutputStream(configFile, false)) {
+                out.write(config.getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 out.flush();
-                Log.i(TAG, "Installed default performance config v" + bundledVersion + ": " + configFile);
-            } finally {
-                if (in != null) in.close();
-                if (out != null) out.close();
             }
+            String profileName = disableMotionBlur ? "performance" : "quality";
+            Log.i(TAG, "Installed " + profileName + " graphics profile: " + configFile);
         } catch (Exception e) {
-            Log.w(TAG, "Failed to install default performance config", e);
-        }
-    }
-
-    private static int installedConfigVersion(File configFile) {
-        try {
-            String content = new String(java.nio.file.Files.readAllBytes(configFile.toPath()));
-            java.util.regex.Matcher matcher =
-                    java.util.regex.Pattern.compile("config_version\\s*=\\s*(\\d+)").matcher(content);
-            return matcher.find() ? Integer.parseInt(matcher.group(1)) : 0;
-        } catch (Exception e) {
-            return 0;
+            Log.w(TAG, "Failed to install graphics config", e);
         }
     }
 

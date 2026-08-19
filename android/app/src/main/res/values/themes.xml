@@ -4,13 +4,13 @@
         <item name="android:windowBackground">@android:color/black</item>
     </style>
 
-    <!-- Dynamic-color Material 3 theme used only by the Java launcher. -->
-    <style name="ReDAHMLauncherTheme" parent="Theme.Material3.DynamicColors.DayNight.NoActionBar">
+    <style name="ReDAHMLauncherTheme" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:navigationBarColor">?attr/colorSurface</item>
-        <item name="android:windowLightNavigationBar">?attr/isLightTheme</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:windowLightStatusBar">?attr/isLightTheme</item>
+        <item name="android:windowBackground">#020B10</item>
+        <item name="android:navigationBarColor">#020B10</item>
+        <item name="android:statusBarColor">#020B10</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
 </resources>

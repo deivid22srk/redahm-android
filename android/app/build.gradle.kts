@@ -2,11 +2,6 @@ plugins {
     id("com.android.application")
 }
 
-// Material Components provides the Material You / Material 3 launcher UI.
-dependencies {
-    implementation("com.google.android.material:material:1.12.0")
-}
-
 android {
     namespace = "io.redahm.android"
     compileSdk = 35
