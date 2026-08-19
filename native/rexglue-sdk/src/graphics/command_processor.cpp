@@ -300,7 +300,7 @@ void CommandProcessor::WorkerThreadMain() {
         "cmd_stalls={} bufq={} funcs={} ints={} threads={} apc={} crit={} tex_hit={} "
         "tex_miss={} pipe_hit={} pipe_miss={}",
         wall_s, busy * 100.0,
-        static_cast<int64_t>(rex::perf::GetCounter(rex::perf::CounterId::kFps)),
+        static_cast<int64_t>(rex::perf::GetSnapshotCounter(rex::perf::CounterId::kFps)),
         static_cast<int64_t>(rex::perf::GetSnapshotCounter(rex::perf::CounterId::kFrameTimeUs)),
         static_cast<int64_t>(rex::perf::GetSnapshotCounter(rex::perf::CounterId::kDrawCalls)),
         static_cast<int64_t>(rex::perf::GetSnapshotCounter(rex::perf::CounterId::kVerticesProcessed)),

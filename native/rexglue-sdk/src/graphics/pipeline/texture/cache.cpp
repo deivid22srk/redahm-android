@@ -25,6 +25,7 @@
 #include <rex/graphics/xenos.h>
 #include <rex/logging.h>
 #include <rex/math.h>
+#include <rex/perf/counter.h>
 
 REXCVAR_DEFINE_INT32(texture_cache_memory_limit_render_to_texture, 24, "GPU",
                      "Texture cache memory limit for render-to-texture (MB)")
@@ -857,6 +858,7 @@ TextureCache::Texture* TextureCache::FindOrCreateTexture(TextureKey key) {
   // previously 0, now not 0, to save memory - common case in streaming.
   auto found_texture_it = textures_.find(key);
   if (found_texture_it != textures_.end()) {
+    PROFILE_TEXTURE_CACHE_HIT();
     return found_texture_it->second.get();
   }
 
@@ -871,6 +873,7 @@ TextureCache::Texture* TextureCache::FindOrCreateTexture(TextureKey key) {
     assert_true(new_texture->key() == key);
     texture = textures_.emplace(key, std::move(new_texture)).first->second.get();
   }
+  PROFILE_TEXTURE_CACHE_MISS();
   COUNT_profile_set("gpu/texture_cache/textures", textures_.size());
   texture->LogAction("Created");
   return texture;

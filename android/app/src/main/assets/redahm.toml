@@ -3,7 +3,10 @@
 #
 # config_version: bumped whenever the tuning below changes; the launcher
 # reinstalls this file if the installed version is older.
-config_version = 2
+# v3: tuning unchanged; bumped so devices whose config was truncated by the
+# pre-v3 launcher graphics-profile write (only disable_motion_blur survived)
+# get the full profile reinstalled.
+config_version = 3
 #
 # Diagnosed on moto g34 5G (Adreno 619, Turnip Mesa 26.3.0-devel):
 # - Async shader compilation queued thousands of pipeline builds; the GPU

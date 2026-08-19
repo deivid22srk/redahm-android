@@ -29,6 +29,7 @@
 #include <rex/filesystem.h>
 #include <rex/logging.h>
 #include <rex/math.h>
+#include <rex/perf/counter.h>
 #include <rex/thread.h>
 #include <rex/memory.h>
 #include <rex/graphics/util/draw.h>
@@ -1107,6 +1108,7 @@ bool VulkanPipelineCache::ConfigurePipeline(
       if (pipeline_handle_out) {
         *pipeline_handle_out = const_cast<Pipeline*>(&last_pipeline_->second);
       }
+      PROFILE_PIPELINE_CACHE_HIT();
       return true;
     }
   }
@@ -1127,6 +1129,7 @@ bool VulkanPipelineCache::ConfigurePipeline(
 
   auto it = pipelines_.find(description);
   if (it != pipelines_.end()) {
+    PROFILE_PIPELINE_CACHE_HIT();
     VkPipeline found_pipeline = it->second.pipeline.load(std::memory_order_acquire);
     if (found_pipeline == VK_NULL_HANDLE) {
       PipelineCreationArguments creation_arguments;
@@ -1149,6 +1152,7 @@ bool VulkanPipelineCache::ConfigurePipeline(
 
   // Create the pipeline if not already existing.
   auto& pipeline = *pipelines_.emplace(description, Pipeline()).first;
+  PROFILE_PIPELINE_CACHE_MISS();
   PipelineCreationArguments creation_arguments_real;
   if (!TryGetPipelineCreationArgumentsForDescription(description, &pipeline,
                                                      creation_arguments_real)) {

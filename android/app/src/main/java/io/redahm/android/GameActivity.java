@@ -2,6 +2,7 @@ package io.redahm.android;
 
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.res.AssetManager;
 import android.hardware.input.InputManager;
 import android.os.Bundle;
 import android.util.Log;
@@ -16,6 +17,7 @@ import org.libsdl.app.SDLControllerManager;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -66,8 +68,16 @@ public class GameActivity extends SDLActivity implements InputManager.InputDevic
     }
 
     /**
-     * Writes the launcher-selected graphics profile before SDL starts. The
+     * Installs the launcher-selected graphics profile before SDL starts. The
      * native runtime loads this TOML from user_data_root during initialization.
+     *
+     * The tuned performance defaults ship in assets/redahm.toml and are
+     * installed first (when absent or outdated); the launcher profile then
+     * overrides only disable_motion_blur on top of them. Truncating the file
+     * to the profile line would revert every tuned key to its native default,
+     * which is the pathological configuration on Turnip/Adreno (async shader
+     * compilation, sysmem untiled rendering, FIFO vsync pacing, readback
+     * coherency overhead).
      */
     private void installGraphicsConfig(int graphicsProfile) {
         boolean disableMotionBlur = graphicsProfile == GRAPHICS_PROFILE_PERFORMANCE;
@@ -78,17 +88,93 @@ public class GameActivity extends SDLActivity implements InputManager.InputDevic
                 return;
             }
             File configFile = new File(userRoot, "redahm.toml");
-            String config = "# ReDAHM launcher graphics profile\n"
-                    + "# This file is rewritten before each game launch.\n"
-                    + "disable_motion_blur = " + disableMotionBlur + "\n";
-            try (OutputStream out = new FileOutputStream(configFile, false)) {
-                out.write(config.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                out.flush();
+            installBaseConfigIfNeeded(configFile);
+            if (!applyMotionBlurProfile(configFile, disableMotionBlur)) {
+                return;
             }
             String profileName = disableMotionBlur ? "performance" : "quality";
             Log.i(TAG, "Installed " + profileName + " graphics profile: " + configFile);
         } catch (Exception e) {
             Log.w(TAG, "Failed to install graphics config", e);
+        }
+    }
+
+    /**
+     * Copies the bundled {@code assets/redahm.toml} performance profile to
+     * {@code <user_data_root>/redahm.toml} when the installed file is missing
+     * or older than the bundled one (versioned via the config_version key).
+     */
+    private void installBaseConfigIfNeeded(File configFile) {
+        final int bundledVersion = 3;
+        try {
+            if (configFile.exists() && installedConfigVersion(configFile) >= bundledVersion) {
+                return;
+            }
+            AssetManager assets = getAssets();
+            InputStream in = null;
+            OutputStream out = null;
+            try {
+                in = assets.open("redahm.toml");
+                out = new FileOutputStream(configFile);
+                byte[] buffer = new byte[16384];
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, read);
+                }
+                out.flush();
+            } finally {
+                if (in != null) in.close();
+                if (out != null) out.close();
+            }
+            Log.i(TAG, "Installed base performance config v" + bundledVersion + ": " + configFile);
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to install base performance config", e);
+        }
+    }
+
+    private static int installedConfigVersion(File configFile) {
+        try {
+            String content = new String(java.nio.file.Files.readAllBytes(configFile.toPath()));
+            java.util.regex.Matcher matcher =
+                    java.util.regex.Pattern.compile("config_version\\s*=\\s*(\\d+)").matcher(content);
+            return matcher.find() ? Integer.parseInt(matcher.group(1)) : 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Overrides only the disable_motion_blur line for the selected profile,
+     * preserving every other tuned key in the installed config. Returns false
+     * if the file could not be read or written.
+     */
+    private static boolean applyMotionBlurProfile(File configFile, boolean disableMotionBlur) {
+        try {
+            String content = new String(java.nio.file.Files.readAllBytes(configFile.toPath()),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            String overrideLine = "disable_motion_blur = " + disableMotionBlur;
+            java.util.regex.Pattern pattern =
+                    java.util.regex.Pattern.compile("(?m)^\\s*disable_motion_blur\\s*=.*$");
+            String updated;
+            if (pattern.matcher(content).find()) {
+                updated = pattern.matcher(content).replaceFirst(
+                        java.util.regex.Matcher.quoteReplacement(overrideLine));
+            } else if (content.isEmpty() || content.endsWith("\n")) {
+                updated = content + overrideLine + "\n";
+            } else {
+                updated = content + "\n" + overrideLine + "\n";
+            }
+            if (updated.equals(content)) {
+                return true;
+            }
+            try (OutputStream out = new FileOutputStream(configFile, false)) {
+                out.write(updated.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                out.flush();
+            }
+            return true;
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to apply the motion blur profile", e);
+            return false;
         }
     }
 
