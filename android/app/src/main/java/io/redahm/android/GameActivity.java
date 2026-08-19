@@ -187,6 +187,18 @@ public class GameActivity extends SDLActivity implements InputManager.InputDevic
         virtualGamepad = new VirtualGamepadView(this);
         virtualGamepad.setListener(new VirtualGamepadView.Listener() {
             @Override public void onButton(String id, boolean pressed) {
+                // SDL exposes the triggers as gamepad axes (lefttrigger:a4,
+                // righttrigger:a5 in the auto-generated Android mapping), not
+                // as buttons: KEYCODE_BUTTON_L2/R2 would land on unmapped
+                // joystick buttons 15/16 and never reach the game.
+                if ("LT".equals(id)) {
+                    SDLControllerManager.dispatchVirtualAxis(VIRTUAL_JOYSTICK_ID, 4, pressed ? 1f : 0f);
+                    return;
+                }
+                if ("RT".equals(id)) {
+                    SDLControllerManager.dispatchVirtualAxis(VIRTUAL_JOYSTICK_ID, 5, pressed ? 1f : 0f);
+                    return;
+                }
                 SDLControllerManager.dispatchVirtualButton(VIRTUAL_JOYSTICK_ID, keyCodeFor(id), pressed);
             }
 
@@ -212,8 +224,6 @@ public class GameActivity extends SDLActivity implements InputManager.InputDevic
             case "Y": return KeyEvent.KEYCODE_BUTTON_Y;
             case "LB": return KeyEvent.KEYCODE_BUTTON_L1;
             case "RB": return KeyEvent.KEYCODE_BUTTON_R1;
-            case "LT": return KeyEvent.KEYCODE_BUTTON_L2;
-            case "RT": return KeyEvent.KEYCODE_BUTTON_R2;
             case "L3": return KeyEvent.KEYCODE_BUTTON_THUMBL;
             case "R3": return KeyEvent.KEYCODE_BUTTON_THUMBR;
             case "VIEW": return KeyEvent.KEYCODE_BUTTON_SELECT;
