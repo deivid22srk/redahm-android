@@ -2,6 +2,13 @@ plugins {
     id("com.android.application")
 }
 
+// Release signing: CI provides the keystore via environment variables
+// (REDAHM_KEYSTORE_FILE/REDAHM_KEYSTORE_PASSWORD/REDAHM_KEY_ALIAS/
+// REDAHM_KEY_PASSWORD, sourced from GitHub Actions secrets). Local builds
+// without them keep the default (debug) signing config, so assembleRelease
+// still produces an installable APK for quick tests.
+val releaseKeystoreFile = System.getenv("REDAHM_KEYSTORE_FILE")
+
 android {
     namespace = "io.redahm.android"
     compileSdk = 35
@@ -18,9 +25,23 @@ android {
         }
     }
 
+    signingConfigs {
+        if (releaseKeystoreFile != null) {
+            create("release") {
+                storeFile = file(releaseKeystoreFile)
+                storePassword = System.getenv("REDAHM_KEYSTORE_PASSWORD") ?: ""
+                keyAlias = System.getenv("REDAHM_KEY_ALIAS") ?: ""
+                keyPassword = System.getenv("REDAHM_KEY_PASSWORD") ?: ""
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (releaseKeystoreFile != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

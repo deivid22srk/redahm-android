@@ -20,3 +20,6 @@ android/.kotlin/
 *.iml
 .vscode/
 *.log
+# Signing material never enters the repo (keystore lives in CI secrets)
+*.keystore
+*.jks
