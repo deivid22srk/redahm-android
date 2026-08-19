@@ -232,3 +232,21 @@ redahm-android/
 - Thermal: android.os ThermalStatus=3 (SEVERE), skin 43-44C, CPU clusters 80-90C during the session - sustained load throttles the Adreno 619 hard, compounding the GPU bottleneck.
 - Conclusion: residual gameplay slowness is GPU-bound on Adreno 619 (EDRAM/720p-class workload through Turnip) made worse by severe thermal throttling. All config levers that reduce GPU work are already at their optimal values (direct_host_resolve, mrt_edram_used_range_clamp_to_min, native_2x_msaa on; FBO/host render-target path; occlusion/coherency off); resolution_scale only supports upscaling (1-8), so there is no config-only downscale.
 - Next levers (future work, code changes): internal render downscale (sub-1.0 resolution path), pipeline pre-warming per known scene, and user-side cooling to avoid SEVERE throttling.
+
+## 15. Botão GUIDE do virtual gamepad abre o menu de configurações do engine
+
+**Contexto**: o usuário pediu uma forma de mudar a qualidade gráfica "dentro do
+próprio jogo". O jogo em si não pode receber opções (binário Xbox 360 emulado,
+não recompilado), mas o engine já possui um overlay de configurações completo
+(ImGui, `ui/overlay/settings_overlay.cpp`, abre com F4 no desktop) que lista
+todos os cvars com badges `[live]`/`[restart]`/`[init-only]` e botão "Save to
+config". No celular faltava apenas um gatilho.
+
+**Solução**: o botão GUIDE do virtual gamepad (topo-centro da tela, não usado
+pelo jogo) agora injeta F4 no fluxo de teclado do SDL ao ser pressionado,
+alternando o overlay de configurações (`GameActivity.installVirtualGamepad`).
+Mudança Java-only (nenhum rebuild nativo necessário).
+
+**Como usar**: com o jogo aberto, tocar no botão GUIDE (topo-centro) abre o
+menu do engine; opções `[live]` aplicam na hora, `[restart]` ficam salvas no
+`redahm.toml` para o próximo boot. Tocar de novo fecha.

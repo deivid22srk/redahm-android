@@ -195,6 +195,16 @@ public class GameActivity extends SDLActivity implements InputManager.InputDevic
                     SDLControllerManager.dispatchVirtualAxis(VIRTUAL_JOYSTICK_ID, 4, pressed ? 1f : 0f);
                     return;
                 }
+                if ("GUIDE".equals(id)) {
+                    // The top-center GUIDE button is not used by the game; repurpose
+                    // it to toggle the engine settings overlay by injecting F4
+                    // (the bind_settings key handled in rex_app.cpp).
+                    if (pressed) {
+                        SDLActivity.onNativeKeyDown(KeyEvent.KEYCODE_F4);
+                        SDLActivity.onNativeKeyUp(KeyEvent.KEYCODE_F4);
+                    }
+                    return;
+                }
                 if ("RT".equals(id)) {
                     SDLControllerManager.dispatchVirtualAxis(VIRTUAL_JOYSTICK_ID, 5, pressed ? 1f : 0f);
                     return;
